@@ -1,0 +1,7 @@
+// import {
+//   "jtenner/sfo_mnb" @lib,
+// }
+
+options(
+  "is-main": true,
+)
