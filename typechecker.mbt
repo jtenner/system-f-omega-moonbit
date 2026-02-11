@@ -46,7 +46,10 @@ pub fn infer_type_with_mode(
 }
 
 ///|
-pub fn merge_substs(local : Substitution, globals : Substitution) -> Substitution {
+pub fn merge_substs(
+  local : Substitution,
+  globals : Substitution,
+) -> Substitution {
   ...
 }
 
@@ -61,22 +64,22 @@ pub fn fresh_meta_var(env : MetaEnv, kind : Kind) -> MetaType {
 }
 
 ///|
-pub fn star_kind() -> Kind {
+pub fn Kind::star() -> Kind {
   ...
 }
 
 ///|
-pub fn never_type() -> Type {
+pub fn Type::never() -> Type {
   ...
 }
 
 ///|
-pub fn unit_type() -> Type {
+pub fn Type::unit() -> Type {
   ...
 }
 
 ///|
-pub fn unit_value() -> Term {
+pub fn Term::unit() -> Term {
   ...
 }
 
@@ -86,8 +89,8 @@ pub fn is_bottom(state : TypeCheckerState, ty : Type) -> Bool {
 }
 
 ///|
-pub fn solve_meta_var(
-  state : TypeCheckerState,
+pub fn TypeCheckerState::solve_meta_var(
+  self : TypeCheckerState,
   evar : String,
   solution : Type,
 ) -> Result[Unit, TypingError] {
@@ -121,7 +124,11 @@ pub fn subsumes(
 }
 
 ///|
-pub fn is_assignable_to(state : TypeCheckerState, from : Type, to : Type) -> Bool {
+pub fn is_assignable_to(
+  state : TypeCheckerState,
+  from : Type,
+  to : Type,
+) -> Bool {
   ...
 }
 
@@ -258,7 +265,10 @@ pub fn check_type(
 }
 
 ///|
-pub fn infer_type(state : TypeCheckerState, term : Term) -> Result[Type, TypingError] {
+pub fn infer_type(
+  state : TypeCheckerState,
+  term : Term,
+) -> Result[Type, TypingError] {
   ...
 }
 
@@ -297,7 +307,10 @@ pub fn process_constraint(
 }
 
 ///|
-pub fn type_check(state : TypeCheckerState, term : Term) -> Result[Type, TypingError] {
+pub fn type_check(
+  state : TypeCheckerState,
+  term : Term,
+) -> Result[Type, TypingError] {
   ...
 }
 
@@ -393,10 +406,7 @@ pub fn rename_binding(
 }
 
 ///|
-pub fn compute_free_types(
-  state : TypeCheckerState,
-  ty : Type,
-) -> FreeTypeNames {
+pub fn compute_free_types(state : TypeCheckerState, ty : Type) -> FreeTypeNames {
   ...
 }
 
@@ -417,7 +427,9 @@ pub fn compute_free_terms(
 }
 
 ///|
-pub fn import_module(args : ImportModuleArgs) -> Result[TypeCheckerState, TypingError] {
+pub fn import_module(
+  args : ImportModuleArgs,
+) -> Result[TypeCheckerState, TypingError] {
   ...
 }
 
@@ -430,8 +442,8 @@ pub fn collect_dependencies(
 }
 
 ///|
-pub fn add_term(
-  state : TypeCheckerState,
+pub fn TypeCheckerState::add_term(
+  self : TypeCheckerState,
   name : String,
   term : Term,
   expected_type : Type?,
@@ -440,8 +452,8 @@ pub fn add_term(
 }
 
 ///|
-pub fn add_builtin(
-  state : TypeCheckerState,
+pub fn TypeCheckerState::add_builtin(
+  self : TypeCheckerState,
   name : String,
   declared_type : Type,
   term : Term?,
@@ -450,8 +462,8 @@ pub fn add_builtin(
 }
 
 ///|
-pub fn add_type(
-  state : TypeCheckerState,
+pub fn TypeCheckerState::add_type(
+  self : TypeCheckerState,
   name : String,
   kind : Kind,
 ) -> Result[TypeCheckerState, TypingError] {
@@ -459,8 +471,8 @@ pub fn add_type(
 }
 
 ///|
-pub fn add_type_alias(
-  state : TypeCheckerState,
+pub fn TypeCheckerState::add_type_alias(
+  self : TypeCheckerState,
   name : String,
   params : Array[String],
   kinds : Array[Kind],
@@ -470,8 +482,8 @@ pub fn add_type_alias(
 }
 
 ///|
-pub fn add_enum(
-  state : TypeCheckerState,
+pub fn TypeCheckerState::add_enum(
+  self : TypeCheckerState,
   name : String,
   params : Array[String],
   kinds : Array[Kind],
@@ -482,8 +494,8 @@ pub fn add_enum(
 }
 
 ///|
-pub fn add_trait_def(
-  state : TypeCheckerState,
+pub fn TypeCheckerState::add_trait_def(
+  self : TypeCheckerState,
   name : String,
   type_param : String,
   kind : Kind,
@@ -493,8 +505,8 @@ pub fn add_trait_def(
 }
 
 ///|
-pub fn add_trait_impl(
-  state : TypeCheckerState,
+pub fn TypeCheckerState::add_trait_impl(
+  self : TypeCheckerState,
   trait_name : String,
   ty : Type,
   dict : Term,
@@ -503,8 +515,8 @@ pub fn add_trait_impl(
 }
 
 ///|
-pub fn add_dict(
-  state : TypeCheckerState,
+pub fn TypeCheckerState::add_dict(
+  self : TypeCheckerState,
   name : String,
   dict : DictTerm,
 ) -> Result[TypeCheckerState, TypingError] {
@@ -517,62 +529,62 @@ pub fn show_type(ty : Type) -> String {
 }
 
 ///|
-pub fn arrow_kind(from : Kind, to : Kind) -> Kind {
+pub fn Kind::arrow(from : Kind, to : Kind) -> Kind {
   ...
 }
 
 ///|
-pub fn var_type(name : String) -> Type {
+pub fn Type::var(name : String) -> Type {
   ...
 }
 
 ///|
-pub fn arrow_type(from : Type, to : Type) -> Type {
+pub fn Type::arrow(from : Type, to : Type) -> Type {
   ...
 }
 
 ///|
-pub fn forall_type(name : String, kind : Kind, body : Type) -> Type {
+pub fn Type::forall(name : String, kind : Kind, body : Type) -> Type {
   ...
 }
 
 ///|
-pub fn app_type(func : Type, arg : Type) -> Type {
+pub fn Type::app(func : Type, arg : Type) -> Type {
   ...
 }
 
 ///|
-pub fn lam_type(name : String, kind : Kind, body : Type) -> Type {
+pub fn Type::lam(name : String, kind : Kind, body : Type) -> Type {
   ...
 }
 
 ///|
-pub fn con_type(name : String) -> Type {
+pub fn Type::con(name : String) -> Type {
   ...
 }
 
 ///|
-pub fn record_type(fields : Array[(String, Type)]) -> Type {
+pub fn Type::record(fields : Array[(String, Type)]) -> Type {
   ...
 }
 
 ///|
-pub fn variant_type(cases : Array[(String, Type)]) -> Type {
+pub fn Type::variant(cases : Array[(String, Type)]) -> Type {
   ...
 }
 
 ///|
-pub fn mu_type(var_name : String, body : Type) -> Type {
+pub fn Type::mu(var_name : String, body : Type) -> Type {
   ...
 }
 
 ///|
-pub fn tuple_type(elements : Array[Type]) -> Type {
+pub fn Type::tuple(elements : Array[Type]) -> Type {
   ...
 }
 
 ///|
-pub fn bounded_forall_type(
+pub fn Type::bounded_forall(
   name : String,
   kind : Kind,
   constraints : Array[TraitConstraint],
@@ -582,82 +594,82 @@ pub fn bounded_forall_type(
 }
 
 ///|
-pub fn var_term(name : String) -> Term {
+pub fn Term::var(name : String) -> Term {
   ...
 }
 
 ///|
-pub fn lam_term(arg : String, ty : Type, body : Term) -> Term {
+pub fn Term::lam(arg : String, ty : Type, body : Term) -> Term {
   ...
 }
 
 ///|
-pub fn app_term(callee : Term, arg : Term) -> Term {
+pub fn Term::app(callee : Term, arg : Term) -> Term {
   ...
 }
 
 ///|
-pub fn tylam_term(name : String, kind : Kind, body : Term) -> Term {
+pub fn Term::tylam(name : String, kind : Kind, body : Term) -> Term {
   ...
 }
 
 ///|
-pub fn tyapp_term(term : Term, ty : Type) -> Term {
+pub fn Term::tyapp(term : Term, ty : Type) -> Term {
   ...
 }
 
 ///|
-pub fn con_term(name : String, ty : Type) -> Term {
+pub fn Term::con(name : String, ty : Type) -> Term {
   ...
 }
 
 ///|
-pub fn record_term(fields : Array[(String, Term)]) -> Term {
+pub fn Term::record(fields : Array[(String, Term)]) -> Term {
   ...
 }
 
 ///|
-pub fn project_term(record : Term, label : String) -> Term {
+pub fn Term::project(record : Term, label : String) -> Term {
   ...
 }
 
 ///|
-pub fn inject_term(label : String, value : Term, variant_ty : Type) -> Term {
+pub fn Term::inject(label : String, value : Term, variant_ty : Type) -> Term {
   ...
 }
 
 ///|
-pub fn match_term(scrutinee : Term, cases : Array[(Pattern, Term)]) -> Term {
+pub fn Term::match_term(scrutinee : Term, cases : Array[(Pattern, Term)]) -> Term {
   ...
 }
 
 ///|
-pub fn fold_term(ty : Type, term : Term) -> Term {
+pub fn Term::fold(ty : Type, term : Term) -> Term {
   ...
 }
 
 ///|
-pub fn unfold_term(term : Term) -> Term {
+pub fn Term::unfold(term : Term) -> Term {
   ...
 }
 
 ///|
-pub fn tuple_term(elements : Array[Term]) -> Term {
+pub fn Term::tuple(elements : Array[Term]) -> Term {
   ...
 }
 
 ///|
-pub fn tuple_project_term(tuple : Term, index : Int) -> Term {
+pub fn Term::tuple_project(tuple : Term, index : Int) -> Term {
   ...
 }
 
 ///|
-pub fn let_term(name : String, value : Term, body : Term) -> Term {
+pub fn Term::let_term(name : String, value : Term, body : Term) -> Term {
   ...
 }
 
 ///|
-pub fn trait_lam_term(
+pub fn Term::trait_lam(
   trait_var : String,
   trait_name : String,
   type_var : String,
@@ -669,12 +681,12 @@ pub fn trait_lam_term(
 }
 
 ///|
-pub fn trait_app_term(term : Term, ty : Type, dicts : Array[Term]) -> Term {
+pub fn Term::trait_app(term : Term, ty : Type, dicts : Array[Term]) -> Term {
   ...
 }
 
 ///|
-pub fn dict_term(
+pub fn Term::dict(
   trait_name : String,
   ty : Type,
   methods : Array[(String, Term)],
@@ -683,52 +695,52 @@ pub fn dict_term(
 }
 
 ///|
-pub fn trait_method_term(dict : Term, method : String) -> Term {
+pub fn Term::trait_method(dict : Term, method : String) -> Term {
   ...
 }
 
 ///|
-pub fn var_pattern(name : String) -> Pattern {
+pub fn Pattern::var(name : String) -> Pattern {
   ...
 }
 
 ///|
-pub fn wildcard_pattern() -> Pattern {
+pub fn Pattern::wildcard() -> Pattern {
   ...
 }
 
 ///|
-pub fn con_pattern(name : String, ty : Type) -> Pattern {
+pub fn Pattern::con(name : String, ty : Type) -> Pattern {
   ...
 }
 
 ///|
-pub fn record_pattern(fields : Array[(String, Pattern)]) -> Pattern {
+pub fn Pattern::record(fields : Array[(String, Pattern)]) -> Pattern {
   ...
 }
 
 ///|
-pub fn variant_pattern(label : String, pattern : Pattern) -> Pattern {
+pub fn Pattern::variant(label : String, pattern : Pattern) -> Pattern {
   ...
 }
 
 ///|
-pub fn tuple_pattern(elements : Array[Pattern]) -> Pattern {
+pub fn Pattern::tuple(elements : Array[Pattern]) -> Pattern {
   ...
 }
 
 ///|
-pub fn term_binding(name : String, ty : Type) -> Binding {
+pub fn Binding::term(name : String, ty : Type) -> Binding {
   ...
 }
 
 ///|
-pub fn type_binding(name : String, kind : Kind) -> Binding {
+pub fn Binding::type_binding(name : String, kind : Kind) -> Binding {
   ...
 }
 
 ///|
-pub fn type_alias_binding(
+pub fn Binding::type_alias(
   name : String,
   params : Array[String],
   kinds : Array[Kind],
@@ -738,7 +750,7 @@ pub fn type_alias_binding(
 }
 
 ///|
-pub fn trait_def_binding(
+pub fn Binding::trait_def(
   name : String,
   type_param : String,
   kind : Kind,
@@ -748,17 +760,21 @@ pub fn trait_def_binding(
 }
 
 ///|
-pub fn trait_impl_binding(trait_name : String, ty : Type, dict : Term) -> Binding {
+pub fn Binding::trait_impl(
+  trait_name : String,
+  ty : Type,
+  dict : Term,
+) -> Binding {
   ...
 }
 
 ///|
-pub fn dict_binding(name : String, trait_name : String, ty : Type) -> Binding {
+pub fn Binding::dict(name : String, trait_name : String, ty : Type) -> Binding {
   ...
 }
 
 ///|
-pub fn enum_def_binding(
+pub fn Binding::enum_def(
   name : String,
   kind : Kind,
   params : Array[String],
@@ -769,6 +785,6 @@ pub fn enum_def_binding(
 }
 
 ///|
-pub fn fresh_state() -> TypeCheckerState {
+pub fn TypeCheckerState::fresh() -> TypeCheckerState {
   ...
 }

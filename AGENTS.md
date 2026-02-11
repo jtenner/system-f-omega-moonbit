@@ -26,6 +26,9 @@ You can browse and install extra skills here:
 
 ## Tooling
 
+- Moon executable path for this workspace: `/home/jtenner/.moon/bin/moon`.
+  Prefer using this explicit path in automation/scripts to avoid PATH issues.
+
 - `moon fmt` is used to format your code properly.
 
 - `moon ide` provides project navigation helpers like `peek-def`, `outline`, and
@@ -49,3 +52,13 @@ You can browse and install extra skills here:
   behavior. For solid, well-defined results (e.g. scientific computations),
   prefer assertion tests. You can use `moon coverage analyze > uncovered.log` to
   see which parts of your code are not covered by tests.
+
+## Current API Conventions
+
+- `typechecker.mbt` is maintained as a public API/signature surface with
+  block-structured declarations.
+- Constructor helpers should prefer static methods on the owning type (for
+  example `Type::var(...)`, `Type::arrow(...)`) instead of free functions like
+  `var_type`/`arrow_type`.
+- Functions that modify `TypeCheckerState` should be instance methods on
+  `TypeCheckerState` and take `self` as the first parameter.
