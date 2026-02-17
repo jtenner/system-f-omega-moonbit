@@ -1,0 +1,386 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "jtenner/sfo_mnb"
+
+import {
+  "moonbitlang/core/set",
+}
+
+// Values
+pub fn import_module(from~ : TypeCheckerState, into~ : TypeCheckerState, roots? : Array[String], aliases? : ImportAliases?, allow_overrides? : Bool) -> Result[TypeCheckerState, TypingError]
+
+pub fn merge_substs(Map[String, Type], Map[String, Type]) -> Map[String, Type]
+
+pub fn unify_kinds(Kind, Kind) -> Result[Unit, TypingError]
+
+// Errors
+pub suberror TypingError {
+  TypeMismatch(Type, Type)
+  KindMismatch(Kind, Kind)
+  Cyclic(String)
+  Unbound(String)
+  NotATypeFunction(Type)
+  NotAVariant(Type)
+  InvalidVariantLabel(Type, String)
+  MissingCase(String)
+  ExtraCase(String)
+  NotATuple(Type)
+  TupleIndexOutOfBounds(Type, Int)
+  NotARecord(Type)
+  MissingField(Type, String)
+  NotAFunction(Type)
+  MissingMethod(String, String)
+  WrongNumberOfDicts(Int, Int)
+  MissingTraitImpl(String, Type)
+  DuplicateBinding(String)
+  CircularImport(String, Array[String])
+  Message(String)
+}
+
+// Types and methods
+pub struct AutoInstantiated {
+  term : Term
+  ty : Type
+}
+
+pub enum Binding {
+  Term(TermBinding)
+  Type(TypeBinding)
+  TraitDef(TraitDefBinding)
+  TraitImpl(TraitImplBinding)
+  Dict(DictBinding)
+  TypeAlias(TypeAliasBinding)
+  Enum(EnumDefBinding)
+}
+pub fn Binding::dict(String, String, Type) -> Self
+pub fn Binding::enum_def(String, Kind, Array[String], Array[(String, Type)], Bool) -> Self
+pub fn Binding::term(String, Type) -> Self
+pub fn Binding::trait_def(String, String, Kind, Array[(String, Type)]) -> Self
+pub fn Binding::trait_impl(String, Type, Term) -> Self
+pub fn Binding::type_alias(String, Array[String], Array[Kind], Type) -> Self
+pub fn Binding::type_binding(String, Kind) -> Self
+
+pub struct CheckedType {
+  ty : Type
+  subst : Map[String, Type]
+}
+
+pub enum Constraint {
+  TypeEq(TypeEqConstraint)
+  KindEq(KindEqConstraint)
+  HasKind(HasKindConstraint)
+  HasType(HasTypeConstraint)
+}
+pub fn Constraint::has_kind(Type, Kind, TypeCheckerState) -> Self
+pub fn Constraint::has_type(Term, Type, TypeCheckerState) -> Self
+pub fn Constraint::kind_eq(Kind, Kind) -> Self
+pub fn Constraint::type_eq(Type, Type) -> Self
+
+pub struct Context(Array[Binding])
+pub fn Context::find_enum(Self, String) -> EnumDefBinding?
+pub fn Context::find_enum_by_variant_label(Self, String) -> EnumDefBinding?
+pub fn Context::find_type_alias(Self, String) -> TypeAliasBinding?
+pub fn Context::find_type_binding(Self, String) -> TypeBinding?
+#deprecated
+pub fn Context::inner(Self) -> Array[Binding]
+
+pub struct DictBinding {
+  name : String
+  trait_name : String
+  ty : Type
+}
+
+pub struct EnumDefBinding {
+  name : String
+  kind : Kind
+  params : Array[String]
+  variants : Array[(String, Type)]
+  recursive : Bool
+}
+
+pub struct FreePatternNames {
+  vars : @set.Set[String]
+  constructors : @set.Set[String]
+  labels : @set.Set[String]
+}
+
+pub struct FreeTermNames {
+  terms : @set.Set[String]
+  constructors : @set.Set[String]
+  traits : @set.Set[String]
+  dicts : @set.Set[String]
+  labels : @set.Set[String]
+  type_vars : @set.Set[String]
+  type_cons : @set.Set[String]
+}
+
+pub struct FreeTypeNames {
+  type_vars : @set.Set[String]
+  type_cons : @set.Set[String]
+  traits : @set.Set[String]
+  labels : @set.Set[String]
+}
+
+pub struct HasKindConstraint {
+  ty : Type
+  kind : Kind
+  state : TypeCheckerState
+}
+
+pub struct HasTypeConstraint {
+  term : Term
+  ty : Type
+  state : TypeCheckerState
+}
+
+pub(all) struct ImportAliases {
+  types : Map[String, String]?
+  traits : Map[String, String]?
+  terms : Map[String, String]?
+  labels : Map[String, String]?
+}
+
+pub enum InferMode {
+  Infer
+  Check(Type)
+}
+pub fn InferMode::check(Type) -> Self
+pub fn InferMode::infer() -> Self
+
+pub struct InstantiatedWithTraits {
+  ty : Type
+  dicts : Array[Term]
+}
+
+pub enum Kind {
+  Star
+  Arrow(Kind, Kind)
+}
+pub fn Kind::arity(Self) -> Int
+pub fn Kind::arrow(Self, Self) -> Self
+pub fn Kind::is_star_kind(Self) -> Bool
+pub fn Kind::peel_n_params(Self, Int) -> Result[(Array[Self], Self), TypingError]
+pub fn Kind::star() -> Self
+pub impl Eq for Kind
+pub impl Hash for Kind
+
+pub struct KindEqConstraint {
+  left : Kind
+  right : Kind
+}
+
+pub struct MetaEnv {
+  mut counter : Int
+  kinds : Map[String, Kind]
+  solutions : Map[String, Type]
+}
+pub fn MetaEnv::fresh_meta_var(Self, Kind) -> Type
+pub fn MetaEnv::occurs_check_evar(Self, String, Type) -> Bool
+
+pub enum Pattern {
+  VarPattern(String)
+  WildcardPattern
+  ConPattern(String, Type)
+  RecordPattern(Array[(String, Pattern)])
+  VariantPattern(String, Pattern)
+  TuplePattern(Array[Pattern])
+}
+pub fn Pattern::con(String, Type) -> Self
+pub fn Pattern::extract_pattern_labels(Self) -> @set.Set[String]
+pub fn Pattern::record(Array[(String, Self)]) -> Self
+pub fn Pattern::tuple(Array[Self]) -> Self
+pub fn Pattern::var_pattern(String) -> Self
+pub fn Pattern::variant(String, Self) -> Self
+pub fn Pattern::wildcard() -> Self
+pub impl Eq for Pattern
+pub impl Hash for Pattern
+pub impl Show for Pattern
+
+pub enum Term {
+  Var(String)
+  Con(String, Type)
+  Lam(String, Type, Term)
+  App(Term, Term)
+  Let(String, Term, Term)
+  TyLam(String, Kind, Term)
+  TyApp(Term, Type)
+  Dict(String, Type, Array[(String, Term)])
+  TraitLam(String, String, String, Kind, Array[TraitConstraint], Term)
+  TraitApp(Term, Type, Array[Term])
+  TraitMethod(Term, String)
+  Record(Array[(String, Term)])
+  Project(Term, String)
+  Inject(String, Term, Type)
+  Match(Term, Array[(Pattern, Term)])
+  Fold(Type, Term)
+  Unfold(Term)
+  Tuple(Array[Term])
+  TupleProject(Term, Int)
+}
+pub fn Term::app(Self, Self) -> Self
+pub fn Term::con(String, Type) -> Self
+pub fn Term::dict(String, Type, Array[(String, Self)]) -> Self
+pub fn Term::fold(Type, Self) -> Self
+pub fn Term::inject(String, Self, Type) -> Self
+pub fn Term::lam(String, Type, Self) -> Self
+pub fn Term::let_term(String, Self, Self) -> Self
+pub fn Term::match_term(Self, Array[(Pattern, Self)]) -> Self
+pub fn Term::project(Self, String) -> Self
+pub fn Term::record(Array[(String, Self)]) -> Self
+pub fn Term::trait_app(Self, Type, Array[Self]) -> Self
+pub fn Term::trait_lam(String, String, String, Kind, Array[TraitConstraint], Self) -> Self
+pub fn Term::trait_method(Self, String) -> Self
+pub fn Term::tuple(Array[Self]) -> Self
+pub fn Term::tuple_project(Self, Int) -> Self
+pub fn Term::tyapp(Self, Type) -> Self
+pub fn Term::tylam(String, Kind, Self) -> Self
+pub fn Term::unfold(Self) -> Self
+pub fn Term::unit() -> Self
+pub fn Term::var_term(String) -> Self
+pub impl Eq for Term
+pub impl Hash for Term
+pub impl Show for Term
+
+pub struct TermBinding {
+  name : String
+  ty : Type
+}
+
+pub struct TraitConstraint {
+  trait_name : String
+  ty : Type
+}
+pub impl Eq for TraitConstraint
+pub impl Hash for TraitConstraint
+
+pub struct TraitDefBinding {
+  name : String
+  type_param : String
+  kind : Kind
+  methods : Array[(String, Type)]
+}
+
+pub struct TraitImplBinding {
+  trait_name : String
+  ty : Type
+  dict : Term
+}
+
+#alias(FieldScheme)
+pub enum Type {
+  Var(String)
+  Con(String)
+  EVar(String)
+  Never
+  Arrow(Type, Type)
+  Forall(String, Kind, Type)
+  BoundedForall(String, Kind, Array[TraitConstraint], Type)
+  Lam(String, Kind, Type)
+  App(Type, Type)
+  Record(Array[(String, Type)])
+  Variant(Array[(String, Type)])
+  Mu(String, Type)
+  Tuple(Array[Type])
+}
+pub fn Type::alpha_rename(Self, String, String) -> Self
+pub fn Type::app(Self, Self) -> Self
+pub fn Type::arrow(Self, Self) -> Self
+pub fn Type::bounded_forall(String, Kind, Array[TraitConstraint], Self) -> Self
+pub fn Type::collect_type_vars(Self) -> Array[String]
+pub fn Type::con(String) -> Self
+pub fn Type::create_variant_lambda(Self, Kind) -> Self
+pub fn Type::forall(String, Kind, Self) -> Self
+pub fn Type::get_spine_args(Self) -> Array[Self]
+pub fn Type::get_spine_head(Self) -> Self
+pub fn Type::is_meta_var(Self) -> Bool
+pub fn Type::lam(String, Kind, Self) -> Self
+pub fn Type::mu(String, Self) -> Self
+pub fn Type::never() -> Self
+pub fn Type::occurs_check(Self, String) -> Bool
+pub fn Type::record(Array[(String, Self)]) -> Self
+pub fn Type::substitute_type(Self, String, Self) -> Self
+pub fn Type::tuple(Array[Self]) -> Self
+pub fn Type::unit() -> Self
+pub fn Type::var_type(String) -> Self
+pub fn Type::variant(Array[(String, Self)]) -> Self
+pub impl Eq for Type
+pub impl Hash for Type
+pub impl Show for Type
+
+pub struct TypeAliasBinding {
+  name : String
+  params : Array[String]
+  kinds : Array[Kind]
+  body : Type
+}
+
+pub struct TypeBinding {
+  name : String
+  kind : Kind
+}
+
+pub struct TypeCheckerState {
+  ctx : Context
+  meta : MetaEnv
+}
+pub fn TypeCheckerState::add_builtin(Self, String, Type, Term?) -> Result[Self, TypingError]
+pub fn TypeCheckerState::add_dict(Self, String, Term) -> Result[Self, TypingError]
+pub fn TypeCheckerState::add_enum(Self, String, Array[String], Array[Kind], Array[(String, Type)], Bool) -> Result[Self, TypingError]
+pub fn TypeCheckerState::add_term(Self, String, Term, Type?) -> Result[Self, TypingError]
+pub fn TypeCheckerState::add_trait_def(Self, String, String, Kind, Array[(String, Type)]) -> Result[Self, TypingError]
+pub fn TypeCheckerState::add_trait_impl(Self, String, Type, Term) -> Result[Self, TypingError]
+pub fn TypeCheckerState::add_type(Self, String, Kind) -> Result[Self, TypingError]
+pub fn TypeCheckerState::add_type_alias(Self, String, Array[String], Array[Kind], Type) -> Result[Self, TypingError]
+pub fn TypeCheckerState::apply_substitution(Self, Map[String, Type], Type) -> Type
+pub fn TypeCheckerState::apply_substitution_to_term(Self, Map[String, Type], Term, @set.Set[String]) -> Term
+pub fn TypeCheckerState::auto_instantiate(Self, Term) -> Result[AutoInstantiated, TypingError]
+pub fn TypeCheckerState::bindings(Self, Pattern) -> Array[(String, Type)]
+pub fn TypeCheckerState::check_exhaustive(Self, Array[Pattern], Type) -> Result[Unit, TypingError]
+pub fn TypeCheckerState::check_kind(Self, Type, Bool) -> Result[Kind, TypingError]
+pub fn TypeCheckerState::check_pattern(Self, Pattern, Type) -> Result[Context, TypingError]
+pub fn TypeCheckerState::check_trait_constraints(Self, Array[TraitConstraint]) -> Result[Array[Term], TypingError]
+pub fn TypeCheckerState::check_trait_implementation(Self, String, Type) -> Result[Term, TypingError]
+pub fn TypeCheckerState::check_type(Self, Term, Type) -> Result[CheckedType, TypingError]
+pub fn TypeCheckerState::collect_dependencies(Self, Array[String]) -> Result[@set.Set[String], TypingError]
+pub fn TypeCheckerState::compute_free_patterns(Self, Pattern) -> FreePatternNames
+pub fn TypeCheckerState::compute_free_terms(Self, Term) -> FreeTermNames
+pub fn TypeCheckerState::compute_free_types(Self, Type) -> FreeTypeNames
+pub fn TypeCheckerState::extend_context(Self, Array[Binding]) -> Self
+pub fn TypeCheckerState::fresh() -> Self
+pub fn TypeCheckerState::get_unbound_metas(Self, Type) -> Array[String]
+pub fn TypeCheckerState::has_unbound_metas(Self, Type) -> Bool
+pub fn TypeCheckerState::infer_type(Self, Term) -> Result[Type, TypingError]
+pub fn TypeCheckerState::infer_type_with_mode(Self, Term, InferMode) -> Result[Type, TypingError]
+pub fn TypeCheckerState::instantiate_term(Self, Term) -> Term
+pub fn TypeCheckerState::instantiate_type(Self, Type) -> Type
+pub fn TypeCheckerState::instantiate_with_traits(Self, Type) -> Result[InstantiatedWithTraits, TypingError]
+pub fn TypeCheckerState::is_assignable_to(Self, Type, Type) -> Bool
+pub fn TypeCheckerState::is_bottom(Self, Type) -> Bool
+pub fn TypeCheckerState::normalize_type(Self, Type) -> Type
+pub fn TypeCheckerState::process_constraint(Self, Constraint, Array[Constraint], Map[String, Type]) -> Result[Unit, TypingError]
+pub fn TypeCheckerState::rename_binding(Self, Binding, Map[String, String]) -> Binding
+pub fn TypeCheckerState::rename_pattern(Self, Pattern, Map[String, String], @set.Set[String]) -> Pattern
+pub fn TypeCheckerState::rename_term(Self, Term, Map[String, String]) -> Term
+pub fn TypeCheckerState::rename_type(Self, Type, Map[String, String]) -> Type
+pub fn TypeCheckerState::resolve_meta_vars(Self, Type) -> Type
+pub fn TypeCheckerState::solve_constraints(Self, Array[Constraint], Map[String, Type]) -> Result[Map[String, Type], TypingError]
+pub fn TypeCheckerState::solve_meta_var(Self, String, Type) -> Result[Unit, TypingError]
+pub fn TypeCheckerState::subsumes(Self, Type, Type, Array[Constraint], Map[String, Type]) -> Result[Unit, TypingError]
+pub fn TypeCheckerState::type_check(Self, Term) -> Result[Type, TypingError]
+pub fn TypeCheckerState::typecheck_with_constraints(Self, Term) -> Result[Type, TypingError]
+pub fn TypeCheckerState::types_equal(Self, Type, Type) -> Bool
+pub fn TypeCheckerState::types_equal_spine(Self, Type, Type) -> Bool
+pub fn TypeCheckerState::unify_types(Self, Type, Type, Array[Constraint], Map[String, Type]) -> Result[Unit, TypingError]
+pub fn TypeCheckerState::unify_variable(Self, String, Type, Map[String, Type]) -> Result[Unit, TypingError]
+
+pub struct TypeEqConstraint {
+  left : Type
+  right : Type
+}
+
+// Type aliases
+pub type Substitution = Map[String, Type]
+
+pub type Worklist = Array[Constraint]
+
+// Traits
+

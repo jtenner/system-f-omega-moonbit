@@ -2,7 +2,7 @@
 pub enum Kind {
   Star
   Arrow(Kind, Kind)
-}
+} derive(Eq, Hash)
 
 ///|
 pub enum Type {
@@ -19,7 +19,7 @@ pub enum Type {
   Variant(Array[(String, Type)])
   Mu(String, Type)
   Tuple(Array[Type])
-}
+} derive(Eq, Hash)
 
 ///|
 pub enum Term {
@@ -42,7 +42,7 @@ pub enum Term {
   Unfold(Term)
   Tuple(Array[Term])
   TupleProject(Term, Int)
-}
+} derive(Eq, Hash)
 
 ///|
 pub enum Pattern {
@@ -52,7 +52,7 @@ pub enum Pattern {
   RecordPattern(Array[(String, Pattern)])
   VariantPattern(String, Pattern)
   TuplePattern(Array[Pattern])
-}
+} derive(Eq, Hash)
 
 ///|
 pub struct MetaEnv {
@@ -161,7 +161,7 @@ pub enum Binding {
 }
 
 ///|
-pub type Context = Array[Binding]
+pub struct Context(Array[Binding])
 
 ///|
 pub struct TypeCheckerState {
@@ -179,7 +179,7 @@ pub type Worklist = Array[Constraint]
 pub struct TraitConstraint {
   trait_name : String
   ty : Type
-}
+} derive(Eq, Hash)
 
 ///|
 pub struct CheckedType {
@@ -232,7 +232,7 @@ pub struct FreeTermNames {
 }
 
 ///|
-pub struct ImportAliases {
+pub(all) struct ImportAliases {
   types : Map[String, String]?
   traits : Map[String, String]?
   terms : Map[String, String]?
@@ -240,16 +240,7 @@ pub struct ImportAliases {
 }
 
 ///|
-pub struct ImportModuleArgs {
-  from : TypeCheckerState
-  into : TypeCheckerState
-  roots : Array[String]
-  aliases : ImportAliases?
-  allow_overrides : Bool
-}
-
-///|
-pub enum TypingError {
+pub suberror TypingError {
   TypeMismatch(Type, Type)
   KindMismatch(Kind, Kind)
   Cyclic(String)
@@ -271,106 +262,3 @@ pub enum TypingError {
   CircularImport(String, Array[String])
   Message(String)
 }
-
-///|
-// MoonBit's built-in Result type is used throughout:
-// Result[OkValue, ErrValue]
-
-///|
-pub type AppType = Type
-
-///|
-pub type ArrowType = Type
-
-///|
-pub type BoundedForallType = Type
-
-///|
-pub type ConType = Type
-
-///|
-pub type ForallType = Type
-
-///|
-pub type LamType = Type
-
-///|
-pub type MetaType = Type
-
-///|
-pub type MuType = Type
-
-///|
-pub type RecordType = Type
-
-///|
-pub type TupleType = Type
-
-///|
-pub type VariantType = Type
-
-///|
-pub type VarType = Type
-
-///|
-pub type AppTerm = Term
-
-///|
-pub type DictTerm = Term
-
-///|
-pub type FoldTerm = Term
-
-///|
-pub type InjectTerm = Term
-
-///|
-pub type LamTerm = Term
-
-///|
-pub type LetTerm = Term
-
-///|
-pub type MatchTerm = Term
-
-///|
-pub type ProjectTerm = Term
-
-///|
-pub type RecordTerm = Term
-
-///|
-pub type TraitAppTerm = Term
-
-///|
-pub type TraitLamTerm = Term
-
-///|
-pub type TraitMethodTerm = Term
-
-///|
-pub type TupleProjectTerm = Term
-
-///|
-pub type TupleTerm = Term
-
-///|
-pub type TyAppTerm = Term
-
-///|
-pub type TyLamTerm = Term
-
-///|
-pub type UnfoldTerm = Term
-
-///|
-pub type VarTerm = Term
-
-///|
-pub type ConPattern = Pattern
-
-///|
-pub type RecordPattern = Pattern
-
-///|
-pub type TuplePattern = Pattern
