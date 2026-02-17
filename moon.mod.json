@@ -1,9 +1,17 @@
 {
-  "name": "jtenner/sfo_mnb",
+  "name": "jtenner/sfo",
   "version": "0.1.0",
   "readme": "README.mbt.md",
-  "repository": "",
-  "license": "Apache-2.0",
-  "keywords": [],
-  "description": ""
+  "repository": "https://github.com/jtenner/system-f-omega-moonbit",
+  "license": "MIT",
+  "keywords": [
+    "typechecker",
+    "type-inference",
+    "system-f",
+    "f-omega",
+    "higher-kinded-types",
+    "kind-checking",
+    "lambda-calculus"
+  ],
+  "description": "A fully tested system-f-omega type checker written in moonbit."
 }

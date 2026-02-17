@@ -956,6 +956,8 @@ fn pattern_to_repr(pattern : Pattern) -> Repr {
 }
 
 ///|
+/// Description: Pretty-prints a type with Unicode syntax.
+/// Example: `let _ = Type::con("Int").pretty_print()`
 pub fn Type::pretty_print(self : Type) -> String {
   let type_env : Map[String, String] = Map::new()
   let rendered = type_to_pretty(self, type_env, 0, 0).0
@@ -963,6 +965,8 @@ pub fn Type::pretty_print(self : Type) -> String {
 }
 
 ///|
+/// Description: Pretty-prints a term with Unicode syntax.
+/// Example: `let _ = Term::unit().pretty_print()`
 pub fn Term::pretty_print(self : Term) -> String {
   let type_env : Map[String, String] = Map::new()
   let rendered = term_to_pretty(self, type_env, 0, 0, "").0
@@ -970,6 +974,8 @@ pub fn Term::pretty_print(self : Term) -> String {
 }
 
 ///|
+/// Description: Pretty-prints a pattern with Unicode syntax.
+/// Example: `let _ = Pattern::wildcard().pretty_print()`
 pub fn Pattern::pretty_print(self : Pattern) -> String {
   let type_env : Map[String, String] = Map::new()
   let rendered = pattern_to_pretty(self, type_env, 0).0
@@ -977,16 +983,22 @@ pub fn Pattern::pretty_print(self : Pattern) -> String {
 }
 
 ///|
+/// Description: Pretty-prints a type using the Unicode-friendly formatter.
+/// Example: `let _ = pretty_type(Type::con("Int"))`
 pub fn pretty_type(ty : Type) -> String {
   ty.pretty_print()
 }
 
 ///|
+/// Description: Pretty-prints a term using the Unicode-friendly formatter.
+/// Example: `let _ = pretty_term(Term::unit())`
 pub fn pretty_term(term : Term) -> String {
   term.pretty_print()
 }
 
 ///|
+/// Description: Pretty-prints a pattern using the Unicode-friendly formatter.
+/// Example: `let _ = pretty_pattern(Pattern::wildcard())`
 pub fn pretty_pattern(pattern : Pattern) -> String {
   pattern.pretty_print()
 }

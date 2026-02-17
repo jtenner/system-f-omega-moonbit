@@ -1,14 +1,20 @@
 ///|
+/// Description: Creates a type-equality constraint.
+/// Example: `let _ = Constraint::type_eq(Type::con("Int"), Type::con("Int"))`
 pub fn Constraint::type_eq(left : Type, right : Type) -> Constraint {
   TypeEq({ left, right })
 }
 
 ///|
+/// Description: Creates a kind-equality constraint.
+/// Example: `let _ = Constraint::kind_eq(Star, Star)`
 pub fn Constraint::kind_eq(left : Kind, right : Kind) -> Constraint {
   KindEq({ left, right })
 }
 
 ///|
+/// Description: Creates a `HasKind` constraint for deferred kind checking.
+/// Example: `let _ = Constraint::has_kind(Type::con("Int"), Star, TypeCheckerState::fresh())`
 pub fn Constraint::has_kind(
   ty : Type,
   kind : Kind,
@@ -18,6 +24,8 @@ pub fn Constraint::has_kind(
 }
 
 ///|
+/// Description: Creates a `HasType` constraint for deferred term typing.
+/// Example: `let _ = Constraint::has_type(Term::unit(), Type::unit(), TypeCheckerState::fresh())`
 pub fn Constraint::has_type(
   term : Term,
   ty : Type,
@@ -27,16 +35,22 @@ pub fn Constraint::has_type(
 }
 
 ///|
+/// Description: Builds infer/check mode that performs type inference.
+/// Example: `let _ = InferMode::infer()`
 pub fn InferMode::infer() -> InferMode {
   Infer
 }
 
 ///|
+/// Description: Builds infer/check mode that checks against the provided type.
+/// Example: `let _ = InferMode::check(Type::con("Int"))`
 pub fn InferMode::check(ty : Type) -> InferMode {
   Check(ty)
 }
 
 ///|
+/// Description: Compares application spine argument equality.
+/// Example: `let _ = TypeCheckerState::fresh().types_equal_spine(Type::app(Type::con("F"), Type::con("Int")), Type::app(Type::con("F"), Type::con("Int")) )`
 pub fn TypeCheckerState::types_equal_spine(
   self : TypeCheckerState,
   left : Type,
@@ -59,6 +73,8 @@ pub fn TypeCheckerState::types_equal_spine(
 }
 
 ///|
+/// Description: Checks structural type equality with alpha-equivalence support.
+/// Example: `let _ = TypeCheckerState::fresh().types_equal(Type::con("Int"), Type::con("Int"))`
 pub fn TypeCheckerState::types_equal(
   self : TypeCheckerState,
   l : Type,
@@ -210,6 +226,8 @@ pub fn TypeCheckerState::types_equal(
 }
 
 ///|
+/// Description: Runs infer or check mode based on `InferMode`.
+/// Example: `let _ = TypeCheckerState::fresh().infer_type_with_mode(Term::unit(), InferMode::infer())`
 pub fn TypeCheckerState::infer_type_with_mode(
   self : TypeCheckerState,
   term : Term,
@@ -228,6 +246,8 @@ pub fn TypeCheckerState::infer_type_with_mode(
 }
 
 ///|
+/// Description: Combines substitutions where entries from `locals` override `globals`.
+/// Example: `let _ = merge_substs(Map::new(), Map::new())`
 pub fn merge_substs(
   locals : Substitution,
   globals : Substitution,
@@ -241,11 +261,15 @@ pub fn merge_substs(
 }
 
 ///|
+/// Description: Returns true if this type is an unsolved evar.
+/// Example: `let _ = EVar("0").is_meta_var()`
 pub fn Type::is_meta_var(self : Type) -> Bool {
   self is EVar(_)
 }
 
 ///|
+/// Description: Allocates a fresh evar of the given kind.
+/// Example: `let _ = MetaEnv::{ counter: 0, kinds: Map::new(), solutions: Map::new() }.fresh_meta_var(Star)`
 pub fn MetaEnv::fresh_meta_var(self : MetaEnv, kind : Kind) -> Type {
   let id = self.counter
   let id = id.to_string()
@@ -255,31 +279,43 @@ pub fn MetaEnv::fresh_meta_var(self : MetaEnv, kind : Kind) -> Type {
 }
 
 ///|
+/// Description: Constructs the base kind `Star`.
+/// Example: `let _ = Kind::star()`
 pub fn Kind::star() -> Kind {
   Star
 }
 
 ///|
+/// Description: Constructs the bottom type `Never`.
+/// Example: `let _ = Type::never()`
 pub fn Type::never() -> Type {
   Never
 }
 
 ///|
+/// Description: Constructs the unit type `()`.
+/// Example: `let _ = Type::unit()`
 pub fn Type::unit() -> Type {
   Tuple([])
 }
 
 ///|
+/// Description: Constructs the unit term `()`.
+/// Example: `let _ = Term::unit()`
 pub fn Term::unit() -> Term {
   Tuple([])
 }
 
 ///|
+/// Description: Checks whether a type normalizes to `Never`.
+/// Example: `let _ = TypeCheckerState::fresh().is_bottom(Type::never())`
 pub fn TypeCheckerState::is_bottom(self : TypeCheckerState, ty : Type) -> Bool {
   self.normalize_type(ty) is Never
 }
 
 ///|
+/// Description: Commits a solution for one evar after occurs/conflict checks.
+/// Example: `let _ = TypeCheckerState::fresh().solve_meta_var("0", Type::con("Int"))`
 pub fn TypeCheckerState::solve_meta_var(
   self : TypeCheckerState,
   evar : String,
@@ -304,6 +340,8 @@ pub fn TypeCheckerState::solve_meta_var(
 }
 
 ///|
+/// Description: Checks whether an evar appears inside a type (following solved metas).
+/// Example: `let _ = MetaEnv::{ counter: 0, kinds: Map::new(), solutions: Map::new() }.occurs_check_evar("0", Type::con("Int"))`
 pub fn MetaEnv::occurs_check_evar(
   self : MetaEnv,
   evar : String,
@@ -353,6 +391,8 @@ pub fn MetaEnv::occurs_check_evar(
 }
 
 ///|
+/// Description: Applies type substitution through all type positions in a term.
+/// Example: `let _ = TypeCheckerState::fresh().apply_substitution_to_term(Map::new(), Term::unit(), Set::new())`
 pub fn TypeCheckerState::apply_substitution_to_term(
   self : TypeCheckerState,
   subst : Substitution,
@@ -489,6 +529,8 @@ pub fn TypeCheckerState::apply_substitution_to_term(
 }
 
 ///|
+/// Description: Instantiates polymorphic term forms with fresh metavariables.
+/// Example: `let _ = TypeCheckerState::fresh().instantiate_term(Term::unit())`
 pub fn TypeCheckerState::instantiate_term(
   self : TypeCheckerState,
   term : Term,
@@ -562,6 +604,8 @@ pub fn TypeCheckerState::instantiate_term(
 }
 
 ///|
+/// Description: Instantiates forall/bounded-forall types with fresh metavariables.
+/// Example: `let _ = TypeCheckerState::fresh().instantiate_type(Type::con("Int"))`
 pub fn TypeCheckerState::instantiate_type(
   self : TypeCheckerState,
   ty : Type,
@@ -582,6 +626,8 @@ pub fn TypeCheckerState::instantiate_type(
 }
 
 ///|
+/// Description: Checks whether one type can be treated as another under instantiation/unification.
+/// Example: `let _ = TypeCheckerState::fresh().subsumes(Type::con("Int"), Type::con("Int"), [], Map::new())`
 pub fn TypeCheckerState::subsumes(
   self : TypeCheckerState,
   general : Type,
@@ -605,6 +651,8 @@ pub fn TypeCheckerState::subsumes(
 }
 
 ///|
+/// Description: Checks assignability relation used by checker rules.
+/// Example: `let _ = TypeCheckerState::fresh().is_assignable_to(Type::con("Int"), Type::con("Int"))`
 pub fn TypeCheckerState::is_assignable_to(
   self : TypeCheckerState,
   from : Type,
@@ -645,6 +693,8 @@ fn walk_bindings(
 }
 
 ///|
+/// Description: Collects variable bindings introduced by a pattern.
+/// Example: `let _ = TypeCheckerState::fresh().bindings(Pattern::var_pattern("x"))`
 pub fn TypeCheckerState::bindings(
   self : TypeCheckerState,
   p : Pattern,
@@ -655,6 +705,8 @@ pub fn TypeCheckerState::bindings(
 }
 
 ///|
+/// Description: Finds a dictionary implementing a trait for a target type.
+/// Example: `let _ = TypeCheckerState::fresh().check_trait_implementation("Eq", Type::con("Int"))`
 pub fn TypeCheckerState::check_trait_implementation(
   self : TypeCheckerState,
   trait_name : String,
@@ -742,6 +794,8 @@ pub fn TypeCheckerState::check_trait_implementation(
 }
 
 ///|
+/// Description: Resolves dictionaries required by trait constraints.
+/// Example: `let _ = TypeCheckerState::fresh().check_trait_constraints([])`
 pub fn TypeCheckerState::check_trait_constraints(
   self : TypeCheckerState,
   constraints : Array[TraitConstraint],
@@ -780,6 +834,8 @@ fn extract_pattern_labels_impl(p : Pattern, res : Set[String]) -> Unit {
 }
 
 ///|
+/// Description: Collects variant labels appearing inside a pattern tree.
+/// Example: `let _ = Pattern::variant("Some", Pattern::wildcard()).extract_pattern_labels()`
 pub fn Pattern::extract_pattern_labels(self : Pattern) -> Set[String] {
   let res = Set::new()
   extract_pattern_labels_impl(self, res)
@@ -787,6 +843,8 @@ pub fn Pattern::extract_pattern_labels(self : Pattern) -> Set[String] {
 }
 
 ///|
+/// Description: Checks whether a set of patterns exhausts a variant/enum scrutinee type.
+/// Example: `let _ = TypeCheckerState::fresh().check_exhaustive([Pattern::wildcard()], Type::variant([("A", Type::unit())]))`
 pub fn TypeCheckerState::check_exhaustive(
   self : TypeCheckerState,
   patterns : Array[Pattern],
@@ -846,6 +904,8 @@ pub fn TypeCheckerState::check_exhaustive(
 }
 
 ///|
+/// Description: Extracts the first `n` argument kinds and the remaining result kind.
+/// Example: `let _ = Kind::arrow(Star, Kind::arrow(Star, Star)).peel_n_params(2)`
 pub fn Kind::peel_n_params(
   self : Kind,
   n : Int,
@@ -1144,6 +1204,8 @@ fn check_con_pattern(
 }
 
 ///|
+/// Description: Checks a pattern against a scrutinee type and returns introduced bindings.
+/// Example: `let _ = TypeCheckerState::fresh().check_pattern(Pattern::wildcard(), Type::con("Int"))`
 pub fn TypeCheckerState::check_pattern(
   self : TypeCheckerState,
   pattern : Pattern,
@@ -1243,6 +1305,8 @@ fn substitute_type_impl(
 }
 
 ///|
+/// Description: Substitutes a type variable with a replacement type.
+/// Example: `let _ = Type::var_type("A").substitute_type("A", Type::con("Int"))`
 pub fn Type::substitute_type(
   self : Type,
   target : String,
@@ -1252,6 +1316,8 @@ pub fn Type::substitute_type(
 }
 
 ///|
+/// Description: Returns true if this kind is `Star`.
+/// Example: `let _ = Kind::star().is_star_kind()`
 pub fn Kind::is_star_kind(self : Kind) -> Bool {
   self is Star
 }
@@ -1536,6 +1602,8 @@ fn check_tuple_kind(
 }
 
 ///|
+/// Description: Computes or validates the kind of a type expression.
+/// Example: `let _ = TypeCheckerState::fresh().check_kind(Type::con("Int"), true)`
 pub fn TypeCheckerState::check_kind(
   self : TypeCheckerState,
   ty : Type,
@@ -1566,6 +1634,8 @@ pub fn TypeCheckerState::check_kind(
 }
 
 ///|
+/// Description: Alpha-renames type variable occurrences under binders where valid.
+/// Example: `let _ = Type::var_type("A").alpha_rename("A", "B")`
 pub fn Type::alpha_rename(self : Type, from : String, to : String) -> Type {
   if from == to {
     return self
@@ -1600,6 +1670,8 @@ pub fn Type::alpha_rename(self : Type, from : String, to : String) -> Type {
 }
 
 ///|
+/// Description: Adds constraints/solutions to unify two types.
+/// Example: `let _ = TypeCheckerState::fresh().unify_types(Type::con("Int"), Type::con("Int"), [], Map::new())`
 pub fn TypeCheckerState::unify_types(
   state : TypeCheckerState,
   left : Type,
@@ -2022,6 +2094,8 @@ pub fn TypeCheckerState::unify_types(
 }
 
 ///|
+/// Description: Unifies a variable name with a type under substitution.
+/// Example: `let _ = TypeCheckerState::fresh().unify_variable("A", Type::con("Int"), Map::new())`
 pub fn TypeCheckerState::unify_variable(
   self : TypeCheckerState,
   var_name : String,
@@ -2070,6 +2144,8 @@ pub fn TypeCheckerState::unify_variable(
 }
 
 ///|
+/// Description: Checks exact equality of two kinds.
+/// Example: `let _ = unify_kinds(Star, Star)`
 pub fn unify_kinds(left : Kind, right : Kind) -> Result[Unit, TypingError] {
   match left == right {
     true => Ok(())
@@ -2078,6 +2154,8 @@ pub fn unify_kinds(left : Kind, right : Kind) -> Result[Unit, TypingError] {
 }
 
 ///|
+/// Description: Checks whether a type variable occurs free in this type.
+/// Example: `let _ = Type::arrow(Type::var_type("A"), Type::con("Int")).occurs_check("A")`
 pub fn Type::occurs_check(self : Type, var_name : String) -> Bool {
   match self {
     Var(name) => name == var_name
@@ -2133,6 +2211,8 @@ pub fn Type::occurs_check(self : Type, var_name : String) -> Bool {
 }
 
 ///|
+/// Description: Applies substitutions (including solved metas) to a type.
+/// Example: `let _ = TypeCheckerState::fresh().apply_substitution(Map::new(), Type::con("Int"))`
 pub fn TypeCheckerState::apply_substitution(
   self : TypeCheckerState,
   subst : Substitution,
@@ -2269,6 +2349,8 @@ pub fn TypeCheckerState::apply_substitution(
 }
 
 ///|
+/// Description: Checks a term against an expected type and returns solved substitutions.
+/// Example: `let _ = TypeCheckerState::fresh().check_type(Term::unit(), Type::unit())`
 pub fn TypeCheckerState::check_type(
   self : TypeCheckerState,
   term : Term,
@@ -3412,6 +3494,8 @@ fn infer_tuple_project_type(
 }
 
 ///|
+/// Description: Infers a type for a term.
+/// Example: `let _ = TypeCheckerState::fresh().infer_type(Term::unit())`
 pub fn TypeCheckerState::infer_type(
   self : TypeCheckerState,
   term : Term,
@@ -3447,6 +3531,8 @@ pub fn TypeCheckerState::infer_type(
 }
 
 ///|
+/// Description: Returns the head of a nested type application spine.
+/// Example: `let _ = Type::app(Type::con("F"), Type::con("Int")).get_spine_head()`
 pub fn Type::get_spine_head(self : Type) -> Type {
   loop self {
     App(func, _) => continue func
@@ -3455,6 +3541,8 @@ pub fn Type::get_spine_head(self : Type) -> Type {
 }
 
 ///|
+/// Description: Returns application spine arguments in evaluation order.
+/// Example: `let _ = Type::app(Type::con("F"), Type::con("Int")).get_spine_args()`
 pub fn Type::get_spine_args(self : Type) -> Array[Type] {
   let args_rev : Array[Type] = []
   let mut cur = self
@@ -3506,6 +3594,8 @@ fn get_unbound_metas_impl(
 }
 
 ///|
+/// Description: Returns names of unsolved evars appearing in a type.
+/// Example: `let _ = TypeCheckerState::fresh().get_unbound_metas(Type::con("Int"))`
 pub fn TypeCheckerState::get_unbound_metas(
   self : TypeCheckerState,
   ty : Type,
@@ -3516,6 +3606,8 @@ pub fn TypeCheckerState::get_unbound_metas(
 }
 
 ///|
+/// Description: Solves a worklist of constraints and returns the resulting substitution.
+/// Example: `let _ = TypeCheckerState::fresh().solve_constraints([], Map::new())`
 pub fn TypeCheckerState::solve_constraints(
   self : TypeCheckerState,
   worklist : Worklist,
@@ -3534,6 +3626,8 @@ pub fn TypeCheckerState::solve_constraints(
 }
 
 ///|
+/// Description: Processes one constraint and may push more work onto the worklist.
+/// Example: `let state = TypeCheckerState::fresh(); let _ = state.process_constraint(Constraint::kind_eq(Star, Star), [], Map::new())`
 pub fn TypeCheckerState::process_constraint(
   self : TypeCheckerState,
   constraint : Constraint,
@@ -3570,6 +3664,8 @@ pub fn TypeCheckerState::process_constraint(
 }
 
 ///|
+/// Description: Convenience alias that typechecks by inference.
+/// Example: `let _ = TypeCheckerState::fresh().type_check(Term::unit())`
 pub fn TypeCheckerState::type_check(
   self : TypeCheckerState,
   term : Term,
@@ -3578,6 +3674,8 @@ pub fn TypeCheckerState::type_check(
 }
 
 ///|
+/// Description: Typechecks a term by creating and solving a temporary type constraint.
+/// Example: `let _ = TypeCheckerState::fresh().typecheck_with_constraints(Term::unit())`
 pub fn TypeCheckerState::typecheck_with_constraints(
   self : TypeCheckerState,
   term : Term,
@@ -3894,6 +3992,8 @@ fn normalize_type_impl(
 }
 
 ///|
+/// Description: Normalizes aliases, enums, beta-redexes, and solved evars in a type.
+/// Example: `let _ = TypeCheckerState::fresh().normalize_type(Type::con("Int"))`
 pub fn TypeCheckerState::normalize_type(
   self : TypeCheckerState,
   ty : Type,
@@ -3902,6 +4002,8 @@ pub fn TypeCheckerState::normalize_type(
 }
 
 ///|
+/// Description: Instantiates a bounded forall and resolves required dictionaries.
+/// Example: `let _ = TypeCheckerState::fresh().instantiate_with_traits(Type::con("Int"))`
 pub fn TypeCheckerState::instantiate_with_traits(
   self : TypeCheckerState,
   ty : Type,
@@ -3928,6 +4030,8 @@ pub fn TypeCheckerState::instantiate_with_traits(
 }
 
 ///|
+/// Description: Automatically inserts type and dictionary applications for polymorphic terms.
+/// Example: `let _ = TypeCheckerState::fresh().auto_instantiate(Term::unit())`
 pub fn TypeCheckerState::auto_instantiate(
   self : TypeCheckerState,
   term : Term,
@@ -3979,6 +4083,8 @@ pub fn TypeCheckerState::auto_instantiate(
 }
 
 ///|
+/// Description: Recursively resolves solved evars in a type.
+/// Example: `let _ = TypeCheckerState::fresh().resolve_meta_vars(Type::con("Int"))`
 pub fn TypeCheckerState::resolve_meta_vars(
   self : TypeCheckerState,
   ty : Type,
@@ -3996,6 +4102,8 @@ pub fn TypeCheckerState::resolve_meta_vars(
 }
 
 ///|
+/// Description: Counts how many argument slots a kind arrow chain has.
+/// Example: `let _ = Kind::arrow(Star, Star).arity()`
 pub fn Kind::arity(self : Kind) -> Int {
   loop (self, 0) {
     (Star, n) => break n
@@ -4004,6 +4112,8 @@ pub fn Kind::arity(self : Kind) -> Int {
 }
 
 ///|
+/// Description: Returns true if a type contains any unsolved evars.
+/// Example: `let _ = TypeCheckerState::fresh().has_unbound_metas(Type::con("Int"))`
 pub fn TypeCheckerState::has_unbound_metas(
   self : TypeCheckerState,
   ty : Type,
@@ -4062,6 +4172,8 @@ fn collect_type_vars_impl(ty : Type, vars : Set[String]) -> Unit {
 }
 
 ///|
+/// Description: Collects free type variable names appearing in this type.
+/// Example: `let _ = Type::arrow(Type::var_type("A"), Type::con("Int")).collect_type_vars()`
 pub fn Type::collect_type_vars(self : Type) -> Array[String] {
   let vars = Set::new()
   collect_type_vars_impl(self, vars)
@@ -4069,6 +4181,8 @@ pub fn Type::collect_type_vars(self : Type) -> Array[String] {
 }
 
 ///|
+/// Description: Wraps a variant type in type lambdas derived from a kind arity.
+/// Example: `let _ = Type::variant([("None", Type::unit())]).create_variant_lambda(Kind::arrow(Star, Star))`
 pub fn Type::create_variant_lambda(self : Type, self_kind : Kind) -> Type {
   match self {
     Variant(_) => {
@@ -4096,6 +4210,8 @@ pub fn Type::create_variant_lambda(self : Type, self_kind : Kind) -> Type {
 }
 
 ///|
+/// Description: Renames free symbols in a type while respecting bound names.
+/// Example: `let _ = TypeCheckerState::fresh().rename_type(Type::con("Int"), Map::new())`
 pub fn TypeCheckerState::rename_type(
   self : TypeCheckerState,
   ty : Type,
@@ -4194,6 +4310,8 @@ pub fn TypeCheckerState::rename_type(
 }
 
 ///|
+/// Description: Renames free symbols in a term while respecting bound names.
+/// Example: `let _ = TypeCheckerState::fresh().rename_term(Term::unit(), Map::new())`
 pub fn TypeCheckerState::rename_term(
   self : TypeCheckerState,
   term : Term,
@@ -4465,6 +4583,8 @@ pub fn TypeCheckerState::rename_term(
 }
 
 ///|
+/// Description: Renames symbols in a pattern while respecting bound names.
+/// Example: `let _ = TypeCheckerState::fresh().rename_pattern(Pattern::wildcard(), Map::new(), Set::new())`
 pub fn TypeCheckerState::rename_pattern(
   self : TypeCheckerState,
   pattern : Pattern,
@@ -4516,6 +4636,8 @@ pub fn TypeCheckerState::rename_pattern(
 }
 
 ///|
+/// Description: Renames free symbols inside a binding payload.
+/// Example: `let _ = TypeCheckerState::fresh().rename_binding(Binding::type_binding("T", Star), Map::new())`
 pub fn TypeCheckerState::rename_binding(
   self : TypeCheckerState,
   binding : Binding,
@@ -4612,6 +4734,8 @@ pub fn TypeCheckerState::rename_binding(
 }
 
 ///|
+/// Description: Computes free-name sets referenced by a type.
+/// Example: `let _ = TypeCheckerState::fresh().compute_free_types(Type::con("Int"))`
 pub fn TypeCheckerState::compute_free_types(
   self : TypeCheckerState,
   ty : Type,
@@ -4681,6 +4805,8 @@ pub fn TypeCheckerState::compute_free_types(
 }
 
 ///|
+/// Description: Computes free-name sets referenced by a pattern.
+/// Example: `let _ = TypeCheckerState::fresh().compute_free_patterns(Pattern::wildcard())`
 pub fn TypeCheckerState::compute_free_patterns(
   self : TypeCheckerState,
   pattern : Pattern,
@@ -4723,6 +4849,8 @@ pub fn TypeCheckerState::compute_free_patterns(
 }
 
 ///|
+/// Description: Computes free-name sets referenced by a term.
+/// Example: `let _ = TypeCheckerState::fresh().compute_free_terms(Term::unit())`
 pub fn TypeCheckerState::compute_free_terms(
   self : TypeCheckerState,
   term : Term,
@@ -4992,6 +5120,8 @@ pub fn TypeCheckerState::compute_free_terms(
 }
 
 ///|
+/// Description: Imports selected roots and their dependencies from one checker state into another.
+/// Example: `let _ = import_module(from=TypeCheckerState::fresh(), into=TypeCheckerState::fresh(), roots=[], aliases=None)`
 pub fn import_module(
   from~ : TypeCheckerState,
   into~ : TypeCheckerState,
@@ -5300,6 +5430,8 @@ pub fn import_module(
 }
 
 ///|
+/// Description: Collects transitive dependencies of context roots with cycle detection.
+/// Example: `let _ = TypeCheckerState::fresh().collect_dependencies([])`
 pub fn TypeCheckerState::collect_dependencies(
   self : TypeCheckerState,
   roots : Array[String],
@@ -5470,6 +5602,8 @@ pub fn TypeCheckerState::collect_dependencies(
 }
 
 ///|
+/// Description: Adds a named term binding by checking or inferring its type.
+/// Example: `let _ = TypeCheckerState::fresh().add_term("x", Term::unit(), None)`
 pub fn TypeCheckerState::add_term(
   self : TypeCheckerState,
   name : String,
@@ -5518,6 +5652,8 @@ pub fn TypeCheckerState::add_term(
 }
 
 ///|
+/// Description: Adds a named builtin term binding with declared type and optional checked term body.
+/// Example: `let _ = TypeCheckerState::fresh().add_builtin("one", Type::con("Int"), None)`
 pub fn TypeCheckerState::add_builtin(
   self : TypeCheckerState,
   name : String,
@@ -5570,6 +5706,8 @@ pub fn TypeCheckerState::add_builtin(
 }
 
 ///|
+/// Description: Adds a type binding to the context.
+/// Example: `let _ = TypeCheckerState::fresh().add_type("Int", Star)`
 pub fn TypeCheckerState::add_type(
   self : TypeCheckerState,
   name : String,
@@ -5598,6 +5736,8 @@ pub fn TypeCheckerState::add_type(
 }
 
 ///|
+/// Description: Adds a type alias after kind and arity validation.
+/// Example: `let _ = TypeCheckerState::fresh().add_type_alias("Id", ["A"], [Star], Type::var_type("A"))`
 pub fn TypeCheckerState::add_type_alias(
   self : TypeCheckerState,
   name : String,
@@ -5659,6 +5799,8 @@ pub fn TypeCheckerState::add_type_alias(
 }
 
 ///|
+/// Description: Validates and adds a nominal enum definition to the context.
+/// Example: `let _ = TypeCheckerState::fresh().add_enum("Maybe", ["A"], [Star], [("None", Type::unit())], false)`
 pub fn TypeCheckerState::add_enum(
   self : TypeCheckerState,
   name : String,
@@ -5737,6 +5879,8 @@ pub fn TypeCheckerState::add_enum(
 }
 
 ///|
+/// Description: Adds a trait definition after validating method kinds.
+/// Example: `let _ = TypeCheckerState::fresh().add_trait_def("Eq", "A", Star, [])`
 pub fn TypeCheckerState::add_trait_def(
   self : TypeCheckerState,
   name : String,
@@ -5779,6 +5923,8 @@ pub fn TypeCheckerState::add_trait_def(
 }
 
 ///|
+/// Description: Adds a trait implementation dictionary for a concrete type.
+/// Example: `let _ = TypeCheckerState::fresh().add_trait_impl("Eq", Type::con("Int"), Term::dict("Eq", Type::con("Int"), []))`
 pub fn TypeCheckerState::add_trait_impl(
   self : TypeCheckerState,
   trait_name : String,
@@ -5810,6 +5956,8 @@ pub fn TypeCheckerState::add_trait_impl(
 }
 
 ///|
+/// Description: Validates and registers a named dictionary binding.
+/// Example: `let _ = TypeCheckerState::fresh().add_dict("d", Term::dict("Eq", Type::con("Int"), []))`
 pub fn TypeCheckerState::add_dict(
   self : TypeCheckerState,
   name : String,
@@ -5848,61 +5996,85 @@ pub fn TypeCheckerState::add_dict(
 }
 
 ///|
+/// Description: Constructs a kind arrow from argument kind to result kind.
+/// Example: `let _ = Kind::arrow(Star, Star)`
 pub fn Kind::arrow(from : Kind, to : Kind) -> Kind {
   Arrow(from, to)
 }
 
 ///|
+/// Description: Constructs a type variable reference.
+/// Example: `let _ = Type::var_type("A")`
 pub fn Type::var_type(name : String) -> Type {
   Var(name)
 }
 
 ///|
+/// Description: Constructs an arrow type.
+/// Example: `let _ = Type::arrow(Type::con("Int"), Type::con("Bool"))`
 pub fn Type::arrow(from : Type, to : Type) -> Type {
   Arrow(from, to)
 }
 
 ///|
+/// Description: Constructs a forall type.
+/// Example: `let _ = Type::forall("A", Star, Type::var_type("A"))`
 pub fn Type::forall(name : String, kind : Kind, body : Type) -> Type {
   Forall(name, kind, body)
 }
 
 ///|
+/// Description: Constructs a type application.
+/// Example: `let _ = Type::app(Type::con("List"), Type::con("Int"))`
 pub fn Type::app(func : Type, arg : Type) -> Type {
   App(func, arg)
 }
 
 ///|
+/// Description: Constructs a type-level lambda.
+/// Example: `let _ = Type::lam("A", Star, Type::var_type("A"))`
 pub fn Type::lam(name : String, kind : Kind, body : Type) -> Type {
   Lam(name, kind, body)
 }
 
 ///|
+/// Description: Constructs a type constructor reference.
+/// Example: `let _ = Type::con("Int")`
 pub fn Type::con(name : String) -> Type {
   Con(name)
 }
 
 ///|
+/// Description: Constructs a record type.
+/// Example: `let _ = Type::record([("x", Type::con("Int"))])`
 pub fn Type::record(fields : Array[(String, Type)]) -> Type {
   Record(fields)
 }
 
 ///|
+/// Description: Constructs a structural variant type.
+/// Example: `let _ = Type::variant([("Some", Type::con("Int"))])`
 pub fn Type::variant(cases : Array[(String, Type)]) -> Type {
   Variant(cases)
 }
 
 ///|
+/// Description: Constructs a recursive `mu` type.
+/// Example: `let _ = Type::mu("X", Type::var_type("X"))`
 pub fn Type::mu(var_name : String, body : Type) -> Type {
   Mu(var_name, body)
 }
 
 ///|
+/// Description: Constructs a tuple type.
+/// Example: `let _ = Type::tuple([Type::con("Int"), Type::con("Bool")])`
 pub fn Type::tuple(elements : Array[Type]) -> Type {
   Tuple(elements)
 }
 
 ///|
+/// Description: Constructs a bounded forall type with trait constraints.
+/// Example: `let _ = Type::bounded_forall("A", Star, [], Type::var_type("A"))`
 pub fn Type::bounded_forall(
   name : String,
   kind : Kind,
@@ -5913,51 +6085,71 @@ pub fn Type::bounded_forall(
 }
 
 ///|
+/// Description: Constructs a term variable reference.
+/// Example: `let _ = Term::var_term("x")`
 pub fn Term::var_term(name : String) -> Term {
   Var(name)
 }
 
 ///|
+/// Description: Constructs a value-level lambda term.
+/// Example: `let _ = Term::lam("x", Type::con("Int"), Term::var_term("x"))`
 pub fn Term::lam(arg : String, ty : Type, body : Term) -> Term {
   Lam(arg, ty, body)
 }
 
 ///|
+/// Description: Constructs a term application.
+/// Example: `let _ = Term::app(Term::var_term("f"), Term::unit())`
 pub fn Term::app(callee : Term, arg : Term) -> Term {
   App(callee, arg)
 }
 
 ///|
+/// Description: Constructs a type lambda term.
+/// Example: `let _ = Term::tylam("A", Star, Term::var_term("x"))`
 pub fn Term::tylam(name : String, kind : Kind, body : Term) -> Term {
   TyLam(name, kind, body)
 }
 
 ///|
+/// Description: Constructs a type application term.
+/// Example: `let _ = Term::tyapp(Term::var_term("id"), Type::con("Int"))`
 pub fn Term::tyapp(term : Term, ty : Type) -> Term {
   TyApp(term, ty)
 }
 
 ///|
+/// Description: Constructs a term constructor/literal with its annotated type.
+/// Example: `let _ = Term::con("one", Type::con("Int"))`
 pub fn Term::con(name : String, ty : Type) -> Term {
   Con(name, ty)
 }
 
 ///|
+/// Description: Constructs a record literal term.
+/// Example: `let _ = Term::record([("x", Term::unit())])`
 pub fn Term::record(fields : Array[(String, Term)]) -> Term {
   Record(fields)
 }
 
 ///|
+/// Description: Constructs a record projection term.
+/// Example: `let _ = Term::project(Term::record([("x", Term::unit())]), "x")`
 pub fn Term::project(record : Term, label : String) -> Term {
   Project(record, label)
 }
 
 ///|
+/// Description: Constructs a variant injection term.
+/// Example: `let _ = Term::inject("Some", Term::unit(), Type::variant([("Some", Type::unit())]))`
 pub fn Term::inject(label : String, value : Term, variant_ty : Type) -> Term {
   Inject(label, value, variant_ty)
 }
 
 ///|
+/// Description: Constructs a match term over patterns.
+/// Example: `let _ = Term::match_term(Term::unit(), [(Pattern::wildcard(), Term::unit())])`
 pub fn Term::match_term(
   scrutinee : Term,
   cases : Array[(Pattern, Term)],
@@ -5966,31 +6158,43 @@ pub fn Term::match_term(
 }
 
 ///|
+/// Description: Constructs a fold term for recursive types.
+/// Example: `let _ = Term::fold(Type::mu("X", Type::var_type("X")), Term::unit())`
 pub fn Term::fold(ty : Type, term : Term) -> Term {
   Fold(ty, term)
 }
 
 ///|
+/// Description: Constructs an unfold term for recursive types.
+/// Example: `let _ = Term::unfold(Term::var_term("x"))`
 pub fn Term::unfold(term : Term) -> Term {
   Unfold(term)
 }
 
 ///|
+/// Description: Constructs a tuple literal term.
+/// Example: `let _ = Term::tuple([Term::unit(), Term::unit()])`
 pub fn Term::tuple(elements : Array[Term]) -> Term {
   Tuple(elements)
 }
 
 ///|
+/// Description: Constructs tuple projection by index.
+/// Example: `let _ = Term::tuple_project(Term::tuple([Term::unit()]), 0)`
 pub fn Term::tuple_project(tuple : Term, index : Int) -> Term {
   TupleProject(tuple, index)
 }
 
 ///|
+/// Description: Constructs a let-binding term.
+/// Example: `let _ = Term::let_term("x", Term::unit(), Term::var_term("x"))`
 pub fn Term::let_term(name : String, value : Term, body : Term) -> Term {
   Let(name, value, body)
 }
 
 ///|
+/// Description: Constructs a trait-bounded polymorphic lambda term.
+/// Example: `let _ = Term::trait_lam("d", "Eq", "A", Star, [], Term::var_term("d"))`
 pub fn Term::trait_lam(
   trait_var : String,
   trait_name : String,
@@ -6003,11 +6207,15 @@ pub fn Term::trait_lam(
 }
 
 ///|
+/// Description: Constructs a trait-polymorphic application with dictionary arguments.
+/// Example: `let _ = Term::trait_app(Term::var_term("f"), Type::con("Int"), [])`
 pub fn Term::trait_app(term : Term, ty : Type, dicts : Array[Term]) -> Term {
   TraitApp(term, ty, dicts)
 }
 
 ///|
+/// Description: Constructs a dictionary term for a trait implementation.
+/// Example: `let _ = Term::dict("Eq", Type::con("Int"), [])`
 pub fn Term::dict(
   trait_name : String,
   ty : Type,
@@ -6017,51 +6225,71 @@ pub fn Term::dict(
 }
 
 ///|
+/// Description: Constructs trait-method selection from a dictionary term.
+/// Example: `let _ = Term::trait_method(Term::var_term("d"), "eq")`
 pub fn Term::trait_method(dict : Term, trait_method : String) -> Term {
   TraitMethod(dict, trait_method)
 }
 
 ///|
+/// Description: Constructs a variable-binding pattern.
+/// Example: `let _ = Pattern::var_pattern("x")`
 pub fn Pattern::var_pattern(name : String) -> Pattern {
   VarPattern(name)
 }
 
 ///|
+/// Description: Constructs a wildcard pattern.
+/// Example: `let _ = Pattern::wildcard()`
 pub fn Pattern::wildcard() -> Pattern {
   WildcardPattern
 }
 
 ///|
+/// Description: Constructs a constructor pattern.
+/// Example: `let _ = Pattern::con("Nil", Type::unit())`
 pub fn Pattern::con(name : String, ty : Type) -> Pattern {
   ConPattern(name, ty)
 }
 
 ///|
+/// Description: Constructs a record pattern.
+/// Example: `let _ = Pattern::record([("x", Pattern::wildcard())])`
 pub fn Pattern::record(fields : Array[(String, Pattern)]) -> Pattern {
   RecordPattern(fields)
 }
 
 ///|
+/// Description: Constructs a variant-case pattern.
+/// Example: `let _ = Pattern::variant("Some", Pattern::wildcard())`
 pub fn Pattern::variant(label : String, pattern : Pattern) -> Pattern {
   VariantPattern(label, pattern)
 }
 
 ///|
+/// Description: Constructs a tuple pattern.
+/// Example: `let _ = Pattern::tuple([Pattern::wildcard(), Pattern::wildcard()])`
 pub fn Pattern::tuple(elements : Array[Pattern]) -> Pattern {
   TuplePattern(elements)
 }
 
 ///|
+/// Description: Constructs a term binding entry.
+/// Example: `let _ = Binding::term("x", Type::con("Int"))`
 pub fn Binding::term(name : String, ty : Type) -> Binding {
   Term(TermBinding::{ name, ty })
 }
 
 ///|
+/// Description: Constructs a type binding entry.
+/// Example: `let _ = Binding::type_binding("T", Star)`
 pub fn Binding::type_binding(name : String, kind : Kind) -> Binding {
   Type(TypeBinding::{ name, kind })
 }
 
 ///|
+/// Description: Constructs a type-alias binding entry.
+/// Example: `let _ = Binding::type_alias("Id", ["A"], [Star], Type::var_type("A"))`
 pub fn Binding::type_alias(
   name : String,
   params : Array[String],
@@ -6072,6 +6300,8 @@ pub fn Binding::type_alias(
 }
 
 ///|
+/// Description: Constructs a trait-definition binding entry.
+/// Example: `let _ = Binding::trait_def("Eq", "A", Star, [])`
 pub fn Binding::trait_def(
   name : String,
   type_param : String,
@@ -6082,6 +6312,8 @@ pub fn Binding::trait_def(
 }
 
 ///|
+/// Description: Constructs a trait-implementation binding entry.
+/// Example: `let _ = Binding::trait_impl("Eq", Type::con("Int"), Term::dict("Eq", Type::con("Int"), []))`
 pub fn Binding::trait_impl(
   trait_name : String,
   ty : Type,
@@ -6091,11 +6323,15 @@ pub fn Binding::trait_impl(
 }
 
 ///|
+/// Description: Constructs a dictionary binding entry.
+/// Example: `let _ = Binding::dict("d", "Eq", Type::con("Int"))`
 pub fn Binding::dict(name : String, trait_name : String, ty : Type) -> Binding {
   Dict(DictBinding::{ name, trait_name, ty })
 }
 
 ///|
+/// Description: Constructs an enum-definition binding entry.
+/// Example: `let _ = Binding::enum_def("Maybe", Kind::arrow(Star, Star), ["A"], [("None", Type::unit())], false)`
 pub fn Binding::enum_def(
   name : String,
   kind : Kind,
@@ -6112,11 +6348,15 @@ fn MetaEnv::new() -> MetaEnv {
 }
 
 ///|
+/// Description: Creates an empty checker state.
+/// Example: `let _ = TypeCheckerState::fresh()`
 pub fn TypeCheckerState::fresh() -> TypeCheckerState {
   TypeCheckerState::{ ctx: Context([]), meta: MetaEnv::new() }
 }
 
 ///|
+/// Description: Looks up an enum definition by enum name.
+/// Example: `let _ = Context([]).find_enum("Maybe")`
 pub fn Context::find_enum(self : Context, n : String) -> EnumDefBinding? {
   for b in self.0 {
     if b is Enum(binding) && binding.name == n {
@@ -6127,6 +6367,8 @@ pub fn Context::find_enum(self : Context, n : String) -> EnumDefBinding? {
 }
 
 ///|
+/// Description: Looks up a type binding by name.
+/// Example: `let _ = Context([]).find_type_binding("T")`
 pub fn Context::find_type_binding(self : Context, n : String) -> TypeBinding? {
   for b in self.0 {
     if b is Type(binding) && binding.name == n {
@@ -6137,6 +6379,8 @@ pub fn Context::find_type_binding(self : Context, n : String) -> TypeBinding? {
 }
 
 ///|
+/// Description: Looks up a type alias by name.
+/// Example: `let _ = Context([]).find_type_alias("Id")`
 pub fn Context::find_type_alias(
   self : Context,
   n : String,
@@ -6150,6 +6394,8 @@ pub fn Context::find_type_alias(
 }
 
 ///|
+/// Description: Finds the enum that defines a given variant label.
+/// Example: `let _ = Context([]).find_enum_by_variant_label("Some")`
 pub fn Context::find_enum_by_variant_label(
   self : Context,
   n : String,
@@ -6168,6 +6414,8 @@ pub fn Context::find_enum_by_variant_label(
 }
 
 ///|
+/// Description: Creates a new state with additional bindings pushed in front of context.
+/// Example: `let _ = TypeCheckerState::fresh().extend_context([Binding::type_binding("T", Star)])`
 pub fn TypeCheckerState::extend_context(
   self : TypeCheckerState,
   bindings : Array[Binding],
