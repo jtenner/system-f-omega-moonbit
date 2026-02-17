@@ -2,6 +2,7 @@
 package "jtenner/sfo_mnb"
 
 import {
+  "moonbitlang/core/debug",
   "moonbitlang/core/set",
 }
 
@@ -9,6 +10,12 @@ import {
 pub fn import_module(from~ : TypeCheckerState, into~ : TypeCheckerState, roots? : Array[String], aliases? : ImportAliases?, allow_overrides? : Bool) -> Result[TypeCheckerState, TypingError]
 
 pub fn merge_substs(Map[String, Type], Map[String, Type]) -> Map[String, Type]
+
+pub fn pretty_pattern(Pattern) -> String
+
+pub fn pretty_term(Term) -> String
+
+pub fn pretty_type(Type) -> String
 
 pub fn unify_kinds(Kind, Kind) -> Result[Unit, TypingError]
 
@@ -186,6 +193,7 @@ pub enum Pattern {
 }
 pub fn Pattern::con(String, Type) -> Self
 pub fn Pattern::extract_pattern_labels(Self) -> @set.Set[String]
+pub fn Pattern::pretty_print(Self) -> String
 pub fn Pattern::record(Array[(String, Self)]) -> Self
 pub fn Pattern::tuple(Array[Self]) -> Self
 pub fn Pattern::var_pattern(String) -> Self
@@ -194,6 +202,7 @@ pub fn Pattern::wildcard() -> Self
 pub impl Eq for Pattern
 pub impl Hash for Pattern
 pub impl Show for Pattern
+pub impl @debug.Debug for Pattern
 
 pub enum Term {
   Var(String)
@@ -224,6 +233,7 @@ pub fn Term::inject(String, Self, Type) -> Self
 pub fn Term::lam(String, Type, Self) -> Self
 pub fn Term::let_term(String, Self, Self) -> Self
 pub fn Term::match_term(Self, Array[(Pattern, Self)]) -> Self
+pub fn Term::pretty_print(Self) -> String
 pub fn Term::project(Self, String) -> Self
 pub fn Term::record(Array[(String, Self)]) -> Self
 pub fn Term::trait_app(Self, Type, Array[Self]) -> Self
@@ -239,6 +249,7 @@ pub fn Term::var_term(String) -> Self
 pub impl Eq for Term
 pub impl Hash for Term
 pub impl Show for Term
+pub impl @debug.Debug for Term
 
 pub struct TermBinding {
   name : String
@@ -296,6 +307,7 @@ pub fn Type::lam(String, Kind, Self) -> Self
 pub fn Type::mu(String, Self) -> Self
 pub fn Type::never() -> Self
 pub fn Type::occurs_check(Self, String) -> Bool
+pub fn Type::pretty_print(Self) -> String
 pub fn Type::record(Array[(String, Self)]) -> Self
 pub fn Type::substitute_type(Self, String, Self) -> Self
 pub fn Type::tuple(Array[Self]) -> Self
@@ -305,6 +317,7 @@ pub fn Type::variant(Array[(String, Self)]) -> Self
 pub impl Eq for Type
 pub impl Hash for Type
 pub impl Show for Type
+pub impl @debug.Debug for Type
 
 pub struct TypeAliasBinding {
   name : String
