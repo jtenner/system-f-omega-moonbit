@@ -15,7 +15,7 @@ test "region collection and solving APIs are scaffolded" {
   assert_true(constraints_result is Err(Message(_)))
 
   let solve_result = state.solve_region_constraints([])
-  assert_true(solve_result is Err(Message(_)))
+  assert_true(solve_result is Ok(_))
 }
 
 ///|

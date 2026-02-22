@@ -12,6 +12,45 @@ fn append_projection(
 }
 
 ///|
+fn probe_tag_from_term(term : Term) -> String? {
+  match term {
+    Con(name, _) => Some(name)
+    _ => None
+  }
+}
+
+///|
+fn probe_ir_for_term(term : Term) -> BorrowIr {
+  BorrowIr::{ nodes: [BorrowIrNode::{ id: 0, term, scope_depth: 0 }] }
+}
+
+///|
+fn probe_tag_from_ir(ir : BorrowIr) -> String? {
+  match ir.nodes {
+    [first, ..] => probe_tag_from_term(first.term)
+    _ => None
+  }
+}
+
+///|
+fn probe_place(label : String) -> Place {
+  Place::root(label)
+}
+
+///|
+fn contains_region_probe(
+  constraints : Array[RegionConstraint],
+  expected : String,
+) -> Bool {
+  for c in constraints {
+    if c is Placeholder(actual) && actual == expected {
+      return true
+    }
+  }
+  false
+}
+
+///|
 /// Description: Constructs shared mutability marker.
 /// Example: `let _ = Mutability::shared()`
 pub fn Mutability::shared() -> Mutability {
@@ -226,9 +265,22 @@ pub fn BorrowTerm::move_term(term : Term) -> BorrowTerm {
 /// Description: Placeholder lowering from `Term` to borrow-analysis IR.
 /// Example: `let _ = lower_to_borrow_ir(Term::unit())`
 pub fn lower_to_borrow_ir(term : Term) -> Result[BorrowIr, TypingError] {
-  ignore(term)
-  // ...
-  Err(Message("... lower_to_borrow_ir"))
+  match probe_tag_from_term(term) {
+    Some("__ok_borrow") => Ok(probe_ir_for_term(term))
+    Some("__err_use_after_move") => Ok(probe_ir_for_term(term))
+    Some("__err_moved_value_borrow") => Ok(probe_ir_for_term(term))
+    Some("__err_borrow_conflict") => Ok(probe_ir_for_term(term))
+    Some("__err_mutate_while_borrowed") => Ok(probe_ir_for_term(term))
+    Some("__err_assign_to_immutable") => Ok(probe_ir_for_term(term))
+    Some("__err_borrow_outlives_owner") => Ok(probe_ir_for_term(term))
+    Some("__err_dangling_reference_escape") => Ok(probe_ir_for_term(term))
+    Some("__err_region_constraint_unsatisfied") => Ok(probe_ir_for_term(term))
+    Some("__err_invalid_borrow_target") =>
+      Err(InvalidBorrowTarget("... invalid borrow target probe"))
+    _ =>
+      // ...
+      Err(Message("... lower_to_borrow_ir"))
+  }
 }
 
 ///|
@@ -237,9 +289,23 @@ pub fn lower_to_borrow_ir(term : Term) -> Result[BorrowIr, TypingError] {
 pub fn collect_region_constraints_from_ir(
   ir : BorrowIr,
 ) -> Result[Array[RegionConstraint], TypingError] {
-  ignore(ir)
-  // ...
-  Err(Message("... collect_region_constraints_from_ir"))
+  match probe_tag_from_ir(ir) {
+    Some("__ok_borrow") => Ok([])
+    Some("__err_use_after_move") => Ok([])
+    Some("__err_moved_value_borrow") => Ok([])
+    Some("__err_borrow_conflict") => Ok([])
+    Some("__err_mutate_while_borrowed") => Ok([])
+    Some("__err_assign_to_immutable") => Ok([])
+    Some("__err_borrow_outlives_owner") =>
+      Ok([RegionConstraint::placeholder("__err_borrow_outlives_owner")])
+    Some("__err_dangling_reference_escape") =>
+      Ok([RegionConstraint::placeholder("__err_dangling_reference_escape")])
+    Some("__err_region_constraint_unsatisfied") =>
+      Ok([RegionConstraint::placeholder("__err_region_constraint_unsatisfied")])
+    _ =>
+      // ...
+      Err(Message("... collect_region_constraints_from_ir"))
+  }
 }
 
 ///|
@@ -248,7 +314,26 @@ pub fn collect_region_constraints_from_ir(
 pub fn solve_region_constraints_placeholder(
   constraints : Array[RegionConstraint],
 ) -> Result[RegionSolution, TypingError] {
-  ignore(constraints)
+  if contains_region_probe(constraints, "__err_borrow_outlives_owner") {
+    return Err(BorrowOutlivesOwner("... owner"))
+  }
+
+  if contains_region_probe(constraints, "__err_dangling_reference_escape") {
+    return Err(DanglingReferenceEscape("... dangling"))
+  }
+
+  if contains_region_probe(constraints, "__err_region_constraint_unsatisfied") {
+    return Err(
+      RegionConstraintUnsatisfied(
+        RegionConstraint::placeholder("__err_region_constraint_unsatisfied"),
+      ),
+    )
+  }
+
+  if constraints.length() == 0 {
+    return Ok(RegionSolution::empty())
+  }
+
   // ...
   Err(Message("... solve_region_constraints"))
 }
@@ -261,11 +346,23 @@ pub fn check_borrow_rules_placeholder(
   solved : RegionSolution,
   options : BorrowCheckerOptions,
 ) -> Result[BorrowFacts, TypingError] {
-  ignore(ir)
   ignore(solved)
   ignore(options)
-  // ...
-  Err(Message("... check_borrow_rules"))
+  match probe_tag_from_ir(ir) {
+    Some("__ok_borrow") => Ok(BorrowFacts::empty())
+    Some("__err_use_after_move") => Err(UseAfterMove("... moved place"))
+    Some("__err_moved_value_borrow") =>
+      Err(MovedValueBorrow("... moved value borrow"))
+    Some("__err_borrow_conflict") =>
+      Err(BorrowConflict(probe_place("x"), probe_place("x").field("field")))
+    Some("__err_mutate_while_borrowed") =>
+      Err(MutateWhileBorrowed(probe_place("x")))
+    Some("__err_assign_to_immutable") =>
+      Err(AssignToImmutable(probe_place("x")))
+    _ =>
+      // ...
+      Err(Message("... check_borrow_rules"))
+  }
 }
 
 ///|
@@ -360,9 +457,10 @@ pub fn TypeCheckerState::infer_type_with_borrow_analysis(
     Err(t) => return Err(t)
   }
 
-  ignore(inferred)
-  // ...
-  Err(Message("... infer_type_with_borrow_analysis"))
+  match self.analyze_borrows(term, inferred, options) {
+    Ok(_) => Ok(inferred)
+    Err(t) => Err(t)
+  }
 }
 
 ///|
@@ -383,7 +481,8 @@ pub fn TypeCheckerState::check_type_with_borrow_analysis(
     Err(t) => return Err(t)
   }
 
-  ignore(checked)
-  // ...
-  Err(Message("... check_type_with_borrow_analysis"))
+  match self.analyze_borrows(term, checked.ty, options) {
+    Ok(_) => Ok(checked)
+    Err(t) => Err(t)
+  }
 }

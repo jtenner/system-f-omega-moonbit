@@ -1,289 +1,263 @@
-# Agent TODO: Borrow Checker + Lifetime (Region) Analysis
+# Agent TODO: Borrow Checker + Lifetime (Region) Analysis Handoff
 
-## Outcome
-- [ ] Add ownership, borrowing, and lifetime checking with region constraints.
-- [ ] Keep current System F-omega typing behavior unchanged for existing terms.
-- [ ] Integrate borrow/lifetime diagnostics into `TypingError` with clear failure modes.
-- [ ] Preserve package API compatibility for existing callers (`infer_type`, `check_type`, `type_check`).
+## 1. Snapshot (2026-02-22)
+- Goal state has **not** been implemented yet. Current code is scaffold + placeholder dispatch.
+- Current baseline from `moon test`: `Total tests: 627, passed: 238, failed: 389`.
+- Intentional red phase exists and is currently active.
 
-## Backward-Compatibility Guardrails
-- [ ] Existing AST forms must typecheck exactly as before when no borrow/reference forms are used.
-- [ ] Existing public methods keep names/signatures unless a strictly additive overload/option is introduced.
-- [ ] Existing tests remain green before enabling new borrow-specific tests by default.
-- [ ] New enum variants are additive; old constructors/helpers keep current behavior.
-- [ ] New analysis pass is a no-op for borrow-free terms.
+### 1.1 What Already Exists
+- [x] Additive borrow/lifetime data model scaffolding in `types.mbt`.
+- [x] Placeholder borrow pipeline API surface in `borrow_scaffold.mbt`.
+- [x] Error-kind classifier helpers in `borrow_test_support_wbtest.mbt`.
+- [x] Green scaffold/harness suites for API shape and placeholder behavior.
+- [x] Large red suites (`feature_red` + `feature_mountain_red`) defining desired feature behavior.
 
-## Architecture Game Plan (Phased)
+### 1.2 What Is Missing (Core)
+- [ ] Real IR lowering for normal terms (currently tag-probe based).
+- [ ] Real region-constraint generation and solving.
+- [ ] Real borrow conflict + move checker.
+- [ ] Integration of actual borrow semantics with current inference/checking.
+- [ ] Direct `Type::Ref` and borrow term forms wired into primary AST and checker.
 
-### Phase 0: Design Freeze and Invariants
-- [ ] Write a short design note in repo docs with:
-- [ ] Ownership model (`Affine` default, optional `Copy` path).
-- [ ] Borrow rules (many shared OR one mutable; no aliasing mutation).
-- [ ] Region model (constraint-based outlives graph, no ad-hoc lexical-only shortcuts).
-- [ ] Escaping rules (no returning references to dead locals).
-- [ ] Decide MVP vs stretch:
-- [ ] MVP: inferred lifetimes + borrow checking for local scopes.
-- [ ] Stretch: explicit lifetime parameters in types/signatures.
-- [ ] Define deterministic error precedence when multiple violations exist.
+## 2. Ground Rules For Handoff
+- [ ] Preserve all existing non-borrow typechecker behavior for borrow-free programs.
+- [ ] Keep API additions additive and avoid breaking existing callers.
+- [ ] Keep deterministic error precedence.
+- [ ] Keep tests as the source of truth; do not delete failing red suites to get green.
+- [ ] Convert scaffold probe-driven behavior to real semantics incrementally.
 
-### Phase 1: Core Data Model Additions (`types.mbt`)
-- [ ] Add ownership and reference primitives:
-- [ ] `Mutability` enum (`Shared`, `Mutable`).
-- [ ] `Region` enum (`Named`, `Infer`, `Static` or equivalent).
-- [ ] `BorrowKind`/`LoanKind` enum (if distinct from mutability in implementation).
-- [ ] Extend `Type` with reference form:
-- [ ] `Ref(region, mutability, inner_type)`.
-- [ ] Optional future-proofing: additive region quantification form (`ForallRegion`) if explicit lifetime polymorphism is required.
-- [ ] Extend `Term` with memory/borrow operations:
-- [ ] Borrow creation (`BorrowShared`, `BorrowMut`, or unified borrow constructor).
-- [ ] Dereference (`Deref`).
-- [ ] Assignment (`Assign`).
-- [ ] Optional mut-binding form (`LetMut`) if mutable locals are explicit.
-- [ ] Add analysis-side structs (kept additive):
-- [ ] `Place` + projection path for fields/tuples/deref.
-- [ ] `Loan` with id, place, mutability, origin, and region.
-- [ ] `RegionConstraint` for outlives relationships.
-- [ ] `BorrowFacts`/`BorrowEnv` summary object for pass output.
-- [ ] Extend `TypingError` with borrow/lifetime variants:
-- [ ] `UseAfterMove`.
-- [ ] `MovedValueBorrow`.
-- [ ] `BorrowConflict`.
-- [ ] `MutateWhileBorrowed`.
-- [ ] `AssignToImmutable`.
-- [ ] `BorrowOutlivesOwner` (or `LifetimeTooShort`).
-- [ ] `DanglingReferenceEscape`.
-- [ ] `InvalidBorrowTarget`.
-- [ ] `RegionConstraintUnsatisfied`.
+## 3. Current Test Surface (Borrow)
 
-### Phase 2: Typechecker Plumbing (`typechecker.mbt`)
-- [ ] Add type inference/checking rules for new term forms:
-- [ ] Borrow operations produce `Type::Ref(...)`.
-- [ ] Deref requires reference type and returns inner type.
-- [ ] Assignment requires mutable place and type compatibility.
-- [ ] Update helper operations for new type variant:
-- [ ] `normalize_type` and `normalize_type_impl`.
-- [ ] `apply_substitution` and substitution internals.
-- [ ] `alpha_rename`/capture-avoidance paths that touch `Type`.
-- [ ] `compute_free_types` and rename helpers.
-- [ ] `types_equal`, `subsumes`, and `unify_types` handling of `Ref`.
-- [ ] Add region/lifetime constraint pipeline:
-- [ ] `collect_region_constraints(term, type, state)`.
-- [ ] `solve_region_constraints(constraints)`.
-- [ ] `check_borrow_rules(term, solved_regions, state)`.
-- [ ] Integrate pipeline points:
-- [ ] Run borrow analysis after successful typing in `infer_type` and `check_type` paths.
-- [ ] Keep behavior identical for terms without borrow/reference operations.
-- [ ] Add a feature/options entrypoint if needed:
-- [ ] `infer_type_with_options` / `check_type_with_options` with defaults preserving current behavior.
+### 3.1 Borrow Test Files
+- `borrow_test_support_wbtest.mbt` (helpers)
+- `typechecker_borrow_core_wbtest.mbt` (3 tests)
+- `typechecker_borrow_infer_check_wbtest.mbt` (4 tests)
+- `typechecker_borrow_regions_wbtest.mbt` (4 tests)
+- `typechecker_borrow_traits_wbtest.mbt` (3 tests)
+- `typechecker_borrow_error_paths_wbtest.mbt` (2 tests)
+- `typechecker_borrow_negative_error_matrix_wbtest.mbt` (11 tests)
+- `typechecker_borrow_spec_matrix_wbtest.mbt` (5 tests)
+- `typechecker_borrow_edge_cases_wbtest.mbt` (16 tests)
+- `typechecker_borrow_feature_red_wbtest.mbt` (14 tests, red)
+- `typechecker_borrow_feature_mountain_red_wbtest.mbt` (376 tests, red)
 
-### Phase 3: Maintainable Separation (New Modules Recommended)
-- [ ] Extract non-typing borrow logic out of monolithic `typechecker.mbt`:
-- [ ] `borrow_ir.mbt` (lowering terms into analysis-friendly form with stable node ids).
-- [ ] `region_solver.mbt` (outlives graph, SCC/cycle checks, solve).
-- [ ] `borrow_checker.mbt` (loan issuance/conflict/move checks).
-- [ ] Keep `typechecker.mbt` as orchestrator, not a second monolith.
-- [ ] Ensure module boundaries are pure and unit-testable.
+### 3.2 Red Mountain Composition
+- Analysis scenarios: 295 tests.
+- Infer-wrapper scenarios: 40 tests.
+- Check-wrapper scenarios: 40 tests.
+- Sanity: 1 test.
 
-### Phase 4: Ownership and Move Semantics
-- [ ] Track move state for places:
-- [ ] whole-variable moves.
-- [ ] partial moves for tuples/records.
-- [ ] reinitialization rules after move.
-- [ ] Define copyability policy:
-- [ ] initial explicit allowlist (primitives/unit).
-- [ ] optional trait-based `Copy` integration later.
-- [ ] Enforce move/borrow interplay:
-- [ ] cannot move while borrowed.
-- [ ] cannot mutably borrow moved/uninitialized place.
-- [ ] use-after-move diagnostics.
+### 3.3 Red Categories To Implement
+- Safe categories:
+  - `safe_shared_read` (20)
+  - `safe_mut_reborrow` (20)
+  - `safe_nll_last_use` (20)
+  - `safe_branch_join` (20)
+  - `safe_trait_poly` (15)
+  - `safe_recursive_projection` (15)
+- Error categories:
+  - `err_borrow_conflict` (20)
+  - `err_use_after_move` (20)
+  - `err_moved_value_borrow` (15)
+  - `err_assign_to_immutable` (15)
+  - `err_mutate_while_borrowed` (15)
+  - `err_outlives_owner` (20)
+  - `err_dangling_escape` (20)
+  - `err_region_unsatisfied` (20)
+  - `err_invalid_target` (15)
+  - `err_trait_escape` (10)
+  - `err_partial_move_projection` (15)
 
-### Phase 5: Regions and Lifetime Inference
-- [ ] Introduce region variables for borrow introductions and significant scope boundaries.
-- [ ] Generate outlives constraints from:
-- [ ] variable scopes.
-- [ ] assignment and reborrow relationships.
-- [ ] function argument/return reference flow.
-- [ ] Solve constraints via fixed-point/topological approach with deterministic ordering.
-- [ ] Reject unresolved/contradictory region constraints with specific errors.
-- [ ] Optional upgrade path to non-lexical lifetimes (NLL):
-- [ ] compute last-use liveness to end borrows earlier than lexical block end.
+## 4. Major Workstreams (Execution Order)
 
-### Phase 6: Trait, Polymorphism, and Existing Feature Interactions
-- [ ] Define and implement interaction with:
-- [ ] `Forall` and `BoundedForall`.
-- [ ] trait dictionaries (`Dict`, `TraitLam`, `TraitApp`, `TraitMethod`).
-- [ ] recursive types (`Mu`), records/variants/tuples, and pattern matching.
-- [ ] Prevent unsound dictionary/reference escapes across trait abstraction boundaries.
-- [ ] Decide whether trait methods may return borrowed references tied to receiver regions.
-- [ ] If explicit lifetime polymorphism is added, ensure instantiation/subsumption handles it.
+## WS0: Remove Probe-Coupling Strategy
+- [ ] Stop using tag-string behavior as semantic truth.
+- [ ] Keep scaffold tests that validate API shape only.
+- [ ] Transition feature tests from `feature_term("__feature_*")` to real term builders.
+- [ ] Ensure future error kinds come from semantics, not hardcoded tags.
 
-### Phase 7: Imports, Renaming, and Free-Name Analysis
-- [ ] Update rename/free-name helpers for new `Type`/`Term` variants:
-- [ ] `rename_type`, `rename_term`, `rename_pattern`, `rename_binding`.
-- [ ] `compute_free_types`, `compute_free_terms`, `compute_free_patterns`.
-- [ ] Ensure import aliasing/conflict detection remains stable with new constructs.
-- [ ] Confirm `collect_dependencies` and `import_module` do not regress with reference-bearing definitions.
+### WS0 Definition of Done
+- [ ] `borrow_scaffold.mbt` no longer dispatches semantics by probe tag.
+- [ ] `typechecker_borrow_feature_red_wbtest.mbt` and mountain tests use actual terms.
 
-### Phase 8: Diagnostics, UX, and Docs
-- [ ] Add concise, actionable error text for each borrow/lifetime failure.
-- [ ] Include context in errors (variable/place, required vs actual outlives relation).
-- [ ] Expand `show.mbt` placeholders for new types/terms to make debug output usable.
-- [ ] Update `README.mbt.md` with:
-- [ ] ownership model,
-- [ ] borrow syntax/semantics,
-- [ ] region/lifetime examples,
-- [ ] migration notes for old code (expected: no changes unless new features are used).
+## WS1: Borrow IR Lowering
+- [ ] Define borrow IR schema stable enough for control-flow + place tracking.
+- [ ] Lower at least: `Var`, `Let`, `Lam`, `App`, `Record`, `Project`, `Tuple`, `TupleProject`, `Match`, `Fold`, `Unfold`, trait terms.
+- [ ] Preserve node ordering and scope-depth/region anchor metadata.
+- [ ] Validate lowering for ordinary terms returns `Ok(BorrowIr)`.
 
-### Phase 9: API and Tooling Finalization
-- [ ] Run `/home/jtenner/.moon/bin/moon test --package jtenner/sfo`.
-- [ ] Run `/home/jtenner/.moon/bin/moon info` and inspect `pkg.generated.mbti` for intended additive API only.
-- [ ] Run `/home/jtenner/.moon/bin/moon fmt`.
-- [ ] Add changelog/release note section documenting new borrow/lifetime checks.
+### WS1 DoD
+- [ ] `RED: lower_to_borrow_ir should succeed for pure unit terms` green.
+- [ ] `RED: lower_to_borrow_ir should produce at least one node for let terms` green.
+- [ ] Non-probe edge tests in `typechecker_borrow_edge_cases_wbtest.mbt` remain green.
 
-## Core Package Change List (Concrete File Targets)
+## WS2: Region Constraint Generation
+- [ ] Generate outlives/equality constraints from scopes.
+- [ ] Emit constraints for borrow introduction, reborrow, assignment, and return flow.
+- [ ] Encode branch join requirements (`Match`, conditional forms) deterministically.
+- [ ] Include trait and polymorphic term flows.
+
+### WS2 DoD
+- [ ] `RED: collect_region_constraints_from_ir should accept empty IR` green.
+- [ ] `RED: collect_region_constraints should accept pure terms` green.
+- [ ] Relevant mountain safe/error region categories begin turning green.
+
+## WS3: Region Solver
+- [ ] Implement graph-based solve for outlives with deterministic ordering.
+- [ ] Support transitive closure and equality unification.
+- [ ] Emit `RegionConstraintUnsatisfied` when obligations cannot be met.
+- [ ] Keep error precedence stable:
+  - [ ] Outlives-owner violations before dangling escape before generic unsatisfied if required by policy.
+
+### WS3 DoD
+- [ ] `RED: solve_region_constraints should solve basic outlives edges` green.
+- [ ] `RED: solve_region_constraints should compute transitive outlives` green.
+- [ ] Red categories `err_outlives_owner`, `err_dangling_escape`, `err_region_unsatisfied` trend green.
+
+## WS4: Place and Alias Analysis
+- [ ] Implement canonical place extraction.
+- [ ] Model overlaps: root vs field, tuple index, deref chains.
+- [ ] Determine compatibility checks for simultaneous loans.
+- [ ] Integrate with projection-heavy terms.
+
+### WS4 DoD
+- [ ] `err_borrow_conflict` categories green.
+- [ ] Edge-case tests about first-node dispatch replaced with semantic place-overlap tests.
+
+## WS5: Loan / Borrow Rules Engine
+- [ ] Implement shared/shared allowed.
+- [ ] Implement shared/mut and mut/mut conflict denial.
+- [ ] Implement mutation restrictions while borrowed.
+- [ ] Implement invalid-target detection for non-place borrow operations.
+
+### WS5 DoD
+- [ ] `err_borrow_conflict` green.
+- [ ] `err_mutate_while_borrowed` green.
+- [ ] `err_assign_to_immutable` green.
+- [ ] `err_invalid_target` green.
+
+## WS6: Move + Initialization Analysis
+- [ ] Track move state for variables and projections.
+- [ ] Detect use-after-move.
+- [ ] Detect borrowing moved values.
+- [ ] Handle partial moves and reinitialization semantics.
+
+### WS6 DoD
+- [ ] `err_use_after_move` green.
+- [ ] `err_moved_value_borrow` green.
+- [ ] `err_partial_move_projection` green.
+
+## WS7: Wrapper and Pipeline Integration
+- [ ] Make `analyze_borrows` call real pipeline and return facts/solution.
+- [ ] Ensure `infer_type_with_borrow_analysis` and `check_type_with_borrow_analysis`:
+  - [ ] Preserve base typing errors first (`Unbound`, etc.).
+  - [ ] Match legacy results for safe programs.
+  - [ ] Emit borrow/lifetime errors for invalid programs.
+- [ ] Keep disabled options as strict no-op if that policy remains.
+
+### WS7 DoD
+- [ ] `RED: infer wrapper should match legacy inference for pure terms when enabled` green.
+- [ ] `RED: check wrapper should match legacy checking for pure terms when enabled` green.
+- [ ] All infer/check mountain subsets trend green.
+
+## WS8: Traits, Polymorphism, Recursive Types, and Match Joins
+- [ ] Ensure trait dictionary flows preserve region obligations.
+- [ ] Ensure no dangling escapes through trait abstraction.
+- [ ] Ensure polymorphic boundaries do not generalize local regions unsafely.
+- [ ] Ensure recursive/projected values are handled soundly.
+- [ ] Ensure match branch joins merge loan/move states correctly.
+
+### WS8 DoD
+- [ ] `safe_trait_poly` + `err_trait_escape` categories green.
+- [ ] `safe_recursive_projection` categories green.
+- [ ] Branch join categories green.
+
+## WS9: Migrate Test Inputs From Synthetic Tags To Real AST Programs
+- [ ] Replace tag-driven `feature_term` generation with explicit term builders.
+- [ ] Keep scenario names stable for continuity.
+- [ ] Introduce helper builders per category in support files.
+- [ ] Maintain category counts while converting semantics.
+
+### WS9 DoD
+- [ ] No feature behavior depends on `Con("__feature_*", ...)` or `Con("__err_*", ...)`.
+- [ ] Red/green status is driven by real term semantics.
+
+## WS10: Diagnostics and Developer UX
+- [ ] Attach actionable payload details to all borrow/lifetime errors.
+- [ ] Improve rendering for new borrow/lifetime structures in `show.mbt`.
+- [ ] Add docs and examples for each major error kind and fix pattern.
+
+### WS10 DoD
+- [ ] Diagnostic tests assert both error kind and useful payload context.
+- [ ] README includes borrow/lifetime guide and migration notes.
+
+## 5. File-Level Task Map
 
 ### `types.mbt`
-- [ ] Add new enums/structs for regions, loans, places, constraints, borrow facts.
-- [ ] Add `Type::Ref(...)` and term constructors for borrow/deref/assign/mut binding.
-- [ ] Add borrow/lifetime `TypingError` variants.
-- [ ] Keep old constructors and helper method behavior unchanged.
+- [ ] Integrate borrow/reference forms directly into `Type` and `Term` if adopting native syntax.
+- [ ] Keep additive API compatibility where possible.
+- [ ] Finalize error variants and payload shapes.
+
+### `borrow_scaffold.mbt`
+- [ ] Replace placeholder/probe logic with real implementations.
+- [ ] Split into modules if needed: `borrow_ir.mbt`, `region_solver.mbt`, `borrow_checker.mbt`.
 
 ### `typechecker.mbt`
-- [ ] Extend type inference/checking for new term/type forms.
-- [ ] Implement region constraint generation + solving.
-- [ ] Implement loan conflict and move-state checks.
-- [ ] Integrate borrow pass into existing `infer_type`/`check_type` pipeline.
-- [ ] Update normalize/unify/substitution/rename/free-name paths for new variants.
+- [ ] Wire new semantic pass into infer/check pipelines.
+- [ ] Ensure unchanged behavior for borrow-free terms.
 
 ### `show.mbt`
-- [ ] Add readable rendering for new `Type`, `Term`, and possibly error variants to improve debugging.
+- [ ] Add robust pretty-printing for borrow/region/place/loan errors and structures.
 
 ### `pkg.generated.mbti`
-- [ ] Regenerate and verify only additive API changes are exposed.
+- [ ] Regenerate with `moon info` after each API-affecting change.
 
-### Test files
-- [ ] Add new whitebox suites:
-- [ ] `typechecker_borrow_core_wbtest.mbt`
-- [ ] `typechecker_borrow_infer_check_wbtest.mbt`
-- [ ] `typechecker_borrow_regions_wbtest.mbt`
-- [ ] `typechecker_borrow_traits_wbtest.mbt`
-- [ ] `typechecker_borrow_error_paths_wbtest.mbt`
-- [ ] Expand `test_support_wbtest.mbt` with helpers for borrow/region assertions.
-- [ ] Keep existing suites unchanged except where additive constructors require pattern updates.
+## 6. Test-Driven Implementation Protocol
+- [ ] Keep red suites failing until their target workstream is implemented.
+- [ ] Work in vertical slices:
+  - [ ] Pick one category group.
+  - [ ] Implement minimum semantics.
+  - [ ] Turn only that category green.
+  - [ ] Refactor with tests green.
+- [ ] Do not mass-edit expectations to hide failures.
+- [ ] Prefer turning on categories by behavior, not by file order.
 
-## Feature Backlog With Subtasks
+## 7. Suggested Green-Up Sequence (Practical)
+1. WS1 + WS2 minimal for pure/safe paths.
+2. WS3 region solver core + precedence.
+3. WS5 borrow conflicts + mutability checks.
+4. WS6 move semantics + partial moves.
+5. WS7 wrapper parity.
+6. WS8 trait/poly/recursive/join hardening.
+7. WS9 remove synthetic-term dependence.
+8. WS10 diagnostics polish.
 
-### Feature A: Reference Types and Terms
-- [ ] Add AST constructors.
-- [ ] Add constructor methods (`Type::ref`, `Term::borrow_shared`, etc.).
-- [ ] Add kind/type rules for constructors.
-- [ ] Add normalization and substitution coverage.
+## 8. Acceptance Gates
 
-### Feature B: Place Analysis
-- [ ] Implement place extraction from terms (`x`, `x.f`, `x.0`, `*p`).
-- [ ] Handle nested projections with deterministic canonicalization.
-- [ ] Add place equality/overlap checks for conflict detection.
+### Gate A (Infra)
+- [ ] `typechecker_borrow_feature_red_wbtest.mbt` first 6 tests green.
 
-### Feature C: Loan Tracking
-- [ ] Create loan issuance rules.
-- [ ] Track active loans by region and place.
-- [ ] Implement conflict matrix:
-- [ ] shared/shared allowed,
-- [ ] shared/mutable denied,
-- [ ] mutable/mutable denied except exact reborrow policy if allowed.
-- [ ] Add loan expiry based on solved region endpoints.
+### Gate B (Core Safety)
+- [ ] Safe categories green for analysis + wrappers.
 
-### Feature D: Move Checking
-- [ ] Mark moves on non-copy values.
-- [ ] Disallow uses after move.
-- [ ] Disallow borrowing moved values.
-- [ ] Support reinitialization to restore availability.
+### Gate C (Core Errors)
+- [ ] Core error categories green for analysis + wrappers.
 
-### Feature E: Region Constraint Solver
-- [ ] Represent outlives graph (`r1 : r2` edges).
-- [ ] Generate constraints from scope nesting and borrow/use sites.
-- [ ] Solve with deterministic transitive closure/fixed point.
-- [ ] Detect unsatisfied constraints and cyclic contradictions where applicable.
+### Gate D (Advanced)
+- [ ] Trait/poly/recursive/join categories green.
 
-### Feature F: Control-Flow-Aware Lifetimes
-- [ ] Build lightweight CFG for `Let`, `Match`, and branch joins.
-- [ ] Merge move and loan states at join points.
-- [ ] Support borrow ending at last use (NLL-style) where feasible.
+### Gate E (Final)
+- [ ] Mountain suite green.
+- [ ] Existing non-borrow suites remain green.
+- [ ] No probe-based behavior remains.
 
-### Feature G: Trait + Polymorphism Safety
-- [ ] Ensure trait dictionary lookup cannot hide lifetime violations.
-- [ ] Ensure bounded polymorphism constraints do not lose region obligations.
-- [ ] Verify generalized types do not capture local regions unsafely.
+## 9. Commands
+- Run tests: `/home/jtenner/.moon/bin/moon test`
+- Format: `/home/jtenner/.moon/bin/moon fmt`
+- Regenerate API: `/home/jtenner/.moon/bin/moon info`
 
-### Feature H: Diagnostics and Explainability
-- [ ] Map errors to specific term forms and places.
-- [ ] Add stable ordering for multi-error scenarios (first causal violation).
-- [ ] Include suggested fix hints for common failures.
-
-## Test Matrix: Primary Cases
-
-### Typing + Borrow Basics
-- [ ] Shared borrow then read (`&x`, deref/read).
-- [ ] Mutable borrow then write (`&mut x`, assignment through deref).
-- [ ] Two shared borrows coexisting.
-- [ ] Mutable borrow exclusivity against existing shared borrow.
-- [ ] Mutable borrow exclusivity against existing mutable borrow.
-
-### Move Semantics
-- [ ] Move then use (error).
-- [ ] Move then reinitialize then use (ok).
-- [ ] Borrow then move while borrow active (error).
-- [ ] Move from tuple/record field and access unaffected fields (policy-specific expected behavior).
-
-### Lifetime/Region Soundness
-- [ ] Borrow does not outlive owner local scope.
-- [ ] Returned reference to parameter with sufficient outlives relation (ok).
-- [ ] Returned reference to local temporary (error).
-- [ ] Reborrow lifetime shorter than parent borrow (ok).
-
-### Existing Features Interop
-- [ ] Borrow inside `Let`, `Lam`, `App`.
-- [ ] Borrowed fields in records and tuples.
-- [ ] Borrows across `Match` branches with join.
-- [ ] Borrows with `Mu`/`Fold`/`Unfold` values (soundness preserved).
-- [ ] Trait method calls with borrowed receivers/args.
-
-## Test Matrix: Edge Cases
-
-### Region Solver Edge Cases
-- [ ] Unsatisfied outlives constraints with minimal counterexample.
-- [ ] Deeply nested region constraints (stress test).
-- [ ] Multiple equivalent solutions produce deterministic chosen result.
-
-### Control Flow Edge Cases
-- [ ] Borrow introduced in one branch but used after join.
-- [ ] Move in one branch, use after join.
-- [ ] Early-return-like shape encoded by branch structure with active loans.
-
-### Alias/Projection Edge Cases
-- [ ] Overlapping places (`x` vs `x.f`, `*p` aliasing rules).
-- [ ] Nested projections with mutable borrow of parent then child access.
-- [ ] Tuple index projection conflicts (`x.0` vs whole `x`).
-
-### Polymorphism and Traits Edge Cases
-- [ ] Generalization over values containing references.
-- [ ] Trait dictionary containing methods that capture local borrows.
-- [ ] Bounded polymorphic functions with borrowed arguments.
-
-### Normalization/Substitution Edge Cases
-- [ ] Substitution through reference types with bound region/type names.
-- [ ] `normalize_type` stability when aliases/enums contain refs.
-- [ ] Unification of reference types with region variables and evars.
-
-### Regression and Compatibility
-- [ ] Run all existing 98+ whitebox tests unchanged.
-- [ ] Confirm no behavior change for borrow-free programs.
-- [ ] Confirm import/rename/free-name helpers continue to pass existing suites.
-
-## Definition of Done
-- [ ] All new borrow/lifetime suites pass.
-- [ ] All existing suites pass without semantic regressions.
-- [ ] Public API changes are additive and documented.
-- [ ] README and examples include borrow/lifetime usage and limits.
-- [ ] Error messages are deterministic and actionable.
-
+## 10. Handoff Notes For Next Agent
+- Treat current green scaffold suites as API-shape checks, not feature completion.
+- Treat current red suites as feature contract backlog.
+- Prefer adding semantic helper builders first, then replacing synthetic tags category-by-category.
+- Keep commits small and tied to one category/workstream at a time.
