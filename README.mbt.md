@@ -564,7 +564,7 @@ fn trait_example() -> Result[Type, TypingError] {
 
 ## Tooling
 
-* `moon test --package jtenner/sfo_mnb`
+* `moon test --package jtenner/sfo`
 * `moon info`
 * `moon fmt`
 

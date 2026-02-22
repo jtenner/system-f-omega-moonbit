@@ -128,7 +128,7 @@ Current whitebox suite covers all major moving parts with 98 tests:
   - `/home/jtenner/.moon/bin/moon info`
   - `/home/jtenner/.moon/bin/moon fmt`
 - Run tests for library package:
-  - `/home/jtenner/.moon/bin/moon test --package jtenner/sfo_mnb`
+  - `/home/jtenner/.moon/bin/moon test --package jtenner/sfo`
 
 Note: running `moon test` for the whole workspace may include `cmd/main` test
 targets and can fail independently of library tests; use the package-scoped
@@ -149,7 +149,7 @@ When changing semantics or APIs:
 1. Update implementation in `typechecker.mbt` (and `types.mbt` if required).
 2. Add/update tests in subsystem-specific `_wbtest.mbt` files.
 3. Run:
-   - `/home/jtenner/.moon/bin/moon test --package jtenner/sfo_mnb`
+   - `/home/jtenner/.moon/bin/moon test --package jtenner/sfo`
    - `/home/jtenner/.moon/bin/moon info`
    - `/home/jtenner/.moon/bin/moon fmt`
 4. Review `.mbti` diffs to confirm intended API surface changes.

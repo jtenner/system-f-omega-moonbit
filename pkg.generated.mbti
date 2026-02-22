@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "jtenner/sfo_mnb"
+package "jtenner/sfo"
 
 import {
   "moonbitlang/core/debug",
@@ -7,7 +7,13 @@ import {
 }
 
 // Values
+pub fn check_borrow_rules_placeholder(BorrowIr, RegionSolution, BorrowCheckerOptions) -> Result[BorrowFacts, TypingError]
+
+pub fn collect_region_constraints_from_ir(BorrowIr) -> Result[Array[RegionConstraint], TypingError]
+
 pub fn import_module(from~ : TypeCheckerState, into~ : TypeCheckerState, roots? : Array[String], aliases? : ImportAliases?, allow_overrides? : Bool) -> Result[TypeCheckerState, TypingError]
+
+pub fn lower_to_borrow_ir(Term) -> Result[BorrowIr, TypingError]
 
 pub fn merge_substs(Map[String, Type], Map[String, Type]) -> Map[String, Type]
 
@@ -16,6 +22,8 @@ pub fn pretty_pattern(Pattern) -> String
 pub fn pretty_term(Term) -> String
 
 pub fn pretty_type(Type) -> String
+
+pub fn solve_region_constraints_placeholder(Array[RegionConstraint]) -> Result[RegionSolution, TypingError]
 
 pub fn unify_kinds(Kind, Kind) -> Result[Unit, TypingError]
 
@@ -38,6 +46,15 @@ pub suberror TypingError {
   MissingMethod(String, String)
   WrongNumberOfDicts(Int, Int)
   MissingTraitImpl(String, Type)
+  UseAfterMove(String)
+  MovedValueBorrow(String)
+  BorrowConflict(Place, Place)
+  MutateWhileBorrowed(Place)
+  AssignToImmutable(Place)
+  BorrowOutlivesOwner(String)
+  DanglingReferenceEscape(String)
+  InvalidBorrowTarget(String)
+  RegionConstraintUnsatisfied(RegionConstraint)
   DuplicateBinding(String)
   CircularImport(String, Array[String])
   Message(String)
@@ -65,6 +82,59 @@ pub fn Binding::trait_def(String, String, Kind, Array[(String, Type)]) -> Self
 pub fn Binding::trait_impl(String, Type, Term) -> Self
 pub fn Binding::type_alias(String, Array[String], Array[Kind], Type) -> Self
 pub fn Binding::type_binding(String, Kind) -> Self
+
+pub struct BorrowAnalysisResult {
+  facts : BorrowFacts
+  solved : RegionSolution
+}
+pub fn BorrowAnalysisResult::empty() -> Self
+
+pub struct BorrowCheckerOptions {
+  enabled : Bool
+  use_nll : Bool
+  diagnostics : Bool
+}
+pub fn BorrowCheckerOptions::default() -> Self
+pub fn BorrowCheckerOptions::disabled() -> Self
+
+pub struct BorrowFacts {
+  loans : Array[Loan]
+  moved_places : @set.Set[String]
+  constraints : Array[RegionConstraint]
+}
+pub fn BorrowFacts::empty() -> Self
+
+pub struct BorrowIr {
+  nodes : Array[BorrowIrNode]
+}
+
+pub struct BorrowIrNode {
+  id : Int
+  term : Term
+  scope_depth : Int
+}
+
+pub enum BorrowTerm {
+  BorrowShared(Place)
+  BorrowMut(Place)
+  Deref(Term)
+  Assign(Place, Term)
+  Move(Term)
+}
+pub fn BorrowTerm::assign(Place, Term) -> Self
+pub fn BorrowTerm::borrow_mut(Place) -> Self
+pub fn BorrowTerm::borrow_shared(Place) -> Self
+pub fn BorrowTerm::deref(Term) -> Self
+pub fn BorrowTerm::move_term(Term) -> Self
+
+pub enum BorrowType {
+  Owned(Type)
+  Ref(Region, Mutability, Type)
+}
+pub fn BorrowType::owned(Type) -> Self
+pub fn BorrowType::ref_type(Region, Mutability, Type) -> Self
+pub impl Eq for BorrowType
+pub impl Hash for BorrowType
 
 pub struct CheckedType {
   ty : Type
@@ -175,6 +245,14 @@ pub struct KindEqConstraint {
   right : Kind
 }
 
+pub struct Loan {
+  id : Int
+  place : Place
+  mutability : Mutability
+  origin : String
+  region : Region
+}
+
 pub struct MetaEnv {
   mut counter : Int
   kinds : Map[String, Kind]
@@ -182,6 +260,15 @@ pub struct MetaEnv {
 }
 pub fn MetaEnv::fresh_meta_var(Self, Kind) -> Type
 pub fn MetaEnv::occurs_check_evar(Self, String, Type) -> Bool
+
+pub enum Mutability {
+  Shared
+  Mutable
+}
+pub fn Mutability::mutable() -> Self
+pub fn Mutability::shared() -> Self
+pub impl Eq for Mutability
+pub impl Hash for Mutability
 
 pub enum Pattern {
   VarPattern(String)
@@ -203,6 +290,54 @@ pub impl Eq for Pattern
 pub impl Hash for Pattern
 pub impl Show for Pattern
 pub impl @debug.Debug for Pattern
+
+pub struct Place {
+  root : String
+  projections : Array[PlaceProjection]
+}
+pub fn Place::deref_place(Self) -> Self
+pub fn Place::field(Self, String) -> Self
+pub fn Place::root(String) -> Self
+pub fn Place::tuple_index(Self, Int) -> Self
+
+pub enum PlaceProjection {
+  Field(String)
+  TupleIndex(Int)
+  Deref
+}
+pub fn PlaceProjection::deref_projection() -> Self
+pub fn PlaceProjection::field(String) -> Self
+pub fn PlaceProjection::tuple_index(Int) -> Self
+pub impl Eq for PlaceProjection
+pub impl Hash for PlaceProjection
+
+pub enum Region {
+  Named(String)
+  Infer(Int)
+  Static
+}
+pub fn Region::infer(Int) -> Self
+pub fn Region::named(String) -> Self
+pub fn Region::static_region() -> Self
+pub impl Eq for Region
+pub impl Hash for Region
+
+pub enum RegionConstraint {
+  Outlives(Region, Region)
+  Equal(Region, Region)
+  Placeholder(String)
+}
+pub fn RegionConstraint::equal(Region, Region) -> Self
+pub fn RegionConstraint::outlives(Region, Region) -> Self
+pub fn RegionConstraint::placeholder(String) -> Self
+pub impl Eq for RegionConstraint
+pub impl Hash for RegionConstraint
+
+pub struct RegionSolution {
+  outlives : Map[Region, @set.Set[Region]]
+  unresolved : Array[RegionConstraint]
+}
+pub fn RegionSolution::empty() -> Self
 
 pub enum Term {
   Var(String)
@@ -343,17 +478,21 @@ pub fn TypeCheckerState::add_trait_def(Self, String, String, Kind, Array[(String
 pub fn TypeCheckerState::add_trait_impl(Self, String, Type, Term) -> Result[Self, TypingError]
 pub fn TypeCheckerState::add_type(Self, String, Kind) -> Result[Self, TypingError]
 pub fn TypeCheckerState::add_type_alias(Self, String, Array[String], Array[Kind], Type) -> Result[Self, TypingError]
+pub fn TypeCheckerState::analyze_borrows(Self, Term, Type, BorrowCheckerOptions) -> Result[BorrowAnalysisResult, TypingError]
 pub fn TypeCheckerState::apply_substitution(Self, Map[String, Type], Type) -> Type
 pub fn TypeCheckerState::apply_substitution_to_term(Self, Map[String, Type], Term, @set.Set[String]) -> Term
 pub fn TypeCheckerState::auto_instantiate(Self, Term) -> Result[AutoInstantiated, TypingError]
 pub fn TypeCheckerState::bindings(Self, Pattern) -> Array[(String, Type)]
+pub fn TypeCheckerState::check_borrow_rules(Self, Term, RegionSolution, BorrowCheckerOptions) -> Result[BorrowFacts, TypingError]
 pub fn TypeCheckerState::check_exhaustive(Self, Array[Pattern], Type) -> Result[Unit, TypingError]
 pub fn TypeCheckerState::check_kind(Self, Type, Bool) -> Result[Kind, TypingError]
 pub fn TypeCheckerState::check_pattern(Self, Pattern, Type) -> Result[Context, TypingError]
 pub fn TypeCheckerState::check_trait_constraints(Self, Array[TraitConstraint]) -> Result[Array[Term], TypingError]
 pub fn TypeCheckerState::check_trait_implementation(Self, String, Type) -> Result[Term, TypingError]
 pub fn TypeCheckerState::check_type(Self, Term, Type) -> Result[CheckedType, TypingError]
+pub fn TypeCheckerState::check_type_with_borrow_analysis(Self, Term, Type, BorrowCheckerOptions) -> Result[CheckedType, TypingError]
 pub fn TypeCheckerState::collect_dependencies(Self, Array[String]) -> Result[@set.Set[String], TypingError]
+pub fn TypeCheckerState::collect_region_constraints(Self, Term, Type) -> Result[Array[RegionConstraint], TypingError]
 pub fn TypeCheckerState::compute_free_patterns(Self, Pattern) -> FreePatternNames
 pub fn TypeCheckerState::compute_free_terms(Self, Term) -> FreeTermNames
 pub fn TypeCheckerState::compute_free_types(Self, Type) -> FreeTypeNames
@@ -362,6 +501,7 @@ pub fn TypeCheckerState::fresh() -> Self
 pub fn TypeCheckerState::get_unbound_metas(Self, Type) -> Array[String]
 pub fn TypeCheckerState::has_unbound_metas(Self, Type) -> Bool
 pub fn TypeCheckerState::infer_type(Self, Term) -> Result[Type, TypingError]
+pub fn TypeCheckerState::infer_type_with_borrow_analysis(Self, Term, BorrowCheckerOptions) -> Result[Type, TypingError]
 pub fn TypeCheckerState::infer_type_with_mode(Self, Term, InferMode) -> Result[Type, TypingError]
 pub fn TypeCheckerState::instantiate_term(Self, Term) -> Term
 pub fn TypeCheckerState::instantiate_type(Self, Type) -> Type
@@ -377,6 +517,7 @@ pub fn TypeCheckerState::rename_type(Self, Type, Map[String, String]) -> Type
 pub fn TypeCheckerState::resolve_meta_vars(Self, Type) -> Type
 pub fn TypeCheckerState::solve_constraints(Self, Array[Constraint], Map[String, Type]) -> Result[Map[String, Type], TypingError]
 pub fn TypeCheckerState::solve_meta_var(Self, String, Type) -> Result[Unit, TypingError]
+pub fn TypeCheckerState::solve_region_constraints(Self, Array[RegionConstraint]) -> Result[RegionSolution, TypingError]
 pub fn TypeCheckerState::subsumes(Self, Type, Type, Array[Constraint], Map[String, Type]) -> Result[Unit, TypingError]
 pub fn TypeCheckerState::type_check(Self, Term) -> Result[Type, TypingError]
 pub fn TypeCheckerState::typecheck_with_constraints(Self, Term) -> Result[Type, TypingError]
@@ -391,6 +532,8 @@ pub struct TypeEqConstraint {
 }
 
 // Type aliases
+pub type LoanId = Int
+
 pub type Substitution = Map[String, Type]
 
 pub type Worklist = Array[Constraint]

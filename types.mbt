@@ -304,6 +304,134 @@ pub(all) struct ImportAliases {
 }
 
 ///|
+/// Description: Mutability marker used by borrow references and active loans.
+/// Example: `let m = Mutability::shared()`
+pub enum Mutability {
+  Shared
+  Mutable
+} derive(Eq, Hash)
+
+///|
+/// Description: Region (lifetime) identity used by borrow checking constraints.
+/// Example: `let r = Region::named("r")`
+pub enum Region {
+  Named(String)
+  Infer(Int)
+  Static
+} derive(Eq, Hash)
+
+///|
+/// Description: Projection step from a place root to a nested sub-place.
+/// Example: `let p = PlaceProjection::field("x")`
+pub enum PlaceProjection {
+  Field(String)
+  TupleIndex(Int)
+  Deref
+} derive(Eq, Hash)
+
+///|
+/// Description: Canonical representation of an lvalue-like borrow target.
+/// Example: `let p = Place::{ root: "x", projections: [] }`
+pub struct Place {
+  root : String
+  projections : Array[PlaceProjection]
+}
+
+///|
+/// Description: Unique loan id assigned while tracking active borrows.
+/// Example: `let id : LoanId = 0`
+pub type LoanId = Int
+
+///|
+/// Description: Active borrow record emitted by borrow analysis.
+/// Example: `let l = Loan::{ id: 0, place: Place::{ root: "x", projections: [] }, mutability: Shared, origin: "x", region: Region::static_region() }`
+pub struct Loan {
+  id : LoanId
+  place : Place
+  mutability : Mutability
+  origin : String
+  region : Region
+}
+
+///|
+/// Description: Constraint relation between region variables.
+/// Example: `let c = RegionConstraint::outlives(Region::named("r1"), Region::named("r2"))`
+pub enum RegionConstraint {
+  Outlives(Region, Region)
+  Equal(Region, Region)
+  Placeholder(String)
+} derive(Eq, Hash)
+
+///|
+/// Description: Borrow checker options scaffold for phased feature rollout.
+/// Example: `let o = BorrowCheckerOptions::{ enabled: true, use_nll: false, diagnostics: true }`
+pub struct BorrowCheckerOptions {
+  enabled : Bool
+  use_nll : Bool
+  diagnostics : Bool
+}
+
+///|
+/// Description: Solved region relation graph returned by the region solver.
+/// Example: `let s = RegionSolution::{ outlives: Map::new(), unresolved: [] }`
+pub struct RegionSolution {
+  outlives : Map[Region, Set[Region]]
+  unresolved : Array[RegionConstraint]
+}
+
+///|
+/// Description: Borrow checker output facts for diagnostics and later optimization passes.
+/// Example: `let f = BorrowFacts::{ loans: [], moved_places: Set::new(), constraints: [] }`
+pub struct BorrowFacts {
+  loans : Array[Loan]
+  moved_places : Set[String]
+  constraints : Array[RegionConstraint]
+}
+
+///|
+/// Description: Combined region and borrow analysis output.
+/// Example: `let r = BorrowAnalysisResult::{ facts: BorrowFacts::{ loans: [], moved_places: Set::new(), constraints: [] }, solved: RegionSolution::{ outlives: Map::new(), unresolved: [] } }`
+pub struct BorrowAnalysisResult {
+  facts : BorrowFacts
+  solved : RegionSolution
+}
+
+///|
+/// Description: Lightweight IR node scaffold for borrow/lifetime analysis.
+/// Example: `let n = BorrowIrNode::{ id: 0, term: Term::unit(), scope_depth: 0 }`
+pub struct BorrowIrNode {
+  id : Int
+  term : Term
+  scope_depth : Int
+}
+
+///|
+/// Description: Linearized IR scaffold consumed by region/borrow passes.
+/// Example: `let ir = BorrowIr::{ nodes: [] }`
+pub struct BorrowIr {
+  nodes : Array[BorrowIrNode]
+}
+
+///|
+/// Description: Borrow-oriented type scaffold, kept additive before integrating directly into `Type`.
+/// Example: `let bt = BorrowType::ref_type(Region::named("r"), Mutability::shared(), Type::con("Int"))`
+pub enum BorrowType {
+  Owned(Type)
+  Ref(Region, Mutability, Type)
+} derive(Eq, Hash)
+
+///|
+/// Description: Borrow-oriented term scaffold, kept additive before integrating directly into `Term`.
+/// Example: `let bt = BorrowTerm::borrow_shared(Place::{ root: "x", projections: [] })`
+pub enum BorrowTerm {
+  BorrowShared(Place)
+  BorrowMut(Place)
+  Deref(Term)
+  Assign(Place, Term)
+  Move(Term)
+}
+
+///|
 /// Description: Error variants produced by kinding, typing, unification, and imports.
 /// Example: `let e : TypingError = Unbound("x")`
 pub suberror TypingError {
@@ -324,6 +452,15 @@ pub suberror TypingError {
   MissingMethod(String, String)
   WrongNumberOfDicts(Int, Int)
   MissingTraitImpl(String, Type)
+  UseAfterMove(String)
+  MovedValueBorrow(String)
+  BorrowConflict(Place, Place)
+  MutateWhileBorrowed(Place)
+  AssignToImmutable(Place)
+  BorrowOutlivesOwner(String)
+  DanglingReferenceEscape(String)
+  InvalidBorrowTarget(String)
+  RegionConstraintUnsatisfied(RegionConstraint)
   DuplicateBinding(String)
   CircularImport(String, Array[String])
   Message(String)
