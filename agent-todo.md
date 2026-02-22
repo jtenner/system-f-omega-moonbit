@@ -6,11 +6,16 @@
 - This backlog now contains only unfinished, concrete tasks.
 
 ## Priority P0: Native Borrow Semantics in Core Typechecker
-- [ ] Add native borrow forms to core AST and types (`Type::Ref`, borrow term constructors) in `types.mbt`, and regenerate API with `moon info`.
-- [ ] Implement infer/check rules for native borrow terms in `typechecker.mbt` so borrow programs typecheck without intrinsic-name placeholders.
+- [x] Add native borrow forms to core AST and types (`Type::Ref`, borrow term constructors) in `types.mbt`, and regenerate API with `moon info`.
+- [x] Implement infer/check rules for native borrow terms in `typechecker.mbt` so borrow programs typecheck without intrinsic-name placeholders.
 - [ ] Wire borrow analysis into the primary infer/check flow policy (not wrapper-only behavior), while preserving non-borrow behavior.
-- [ ] Replace wrapper-level dependency on unbound intrinsic vars (`borrow_shared`, `borrow_mut`, etc.) with typed native borrow syntax.
-- [ ] Add focused whitebox tests for native borrow typing (shared borrow, mutable borrow, deref, assign, move).
+- [x] Replace wrapper-level dependency on unbound intrinsic vars (`borrow_shared`, `borrow_mut`, etc.) with typed native borrow syntax.
+- [x] Add focused whitebox tests for native borrow typing (shared borrow, mutable borrow, deref, assign, move).
+
+### P0 follow-ups discovered (2026-02-22)
+- [ ] Define deterministic region allocation semantics for native `Type::Ref` inference (current implementation uses `Region::static_region()` as a temporary default).
+- [ ] Tighten native borrow target validation so `infer/check` and borrow IR lowering share one canonical place-extraction routine.
+- [ ] Add focused tests for native `check_type` region/mutability mismatch behavior (`Ref` expected type interactions).
 
 ## Priority P1: IR and Region Soundness
 - [ ] Define and document a stable borrow IR schema for control flow, places, and scope boundaries in `borrow_scaffold.mbt`.

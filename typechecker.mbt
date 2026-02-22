@@ -86,6 +86,10 @@ pub fn TypeCheckerState::types_equal(
       self.types_equal_spine(l_body, r_body)
     (Arrow(from_l, to_l), Arrow(from_r, to_r)) =>
       self.types_equal(from_l, from_r) && self.types_equal(to_l, to_r)
+    (Ref(l_region, l_mutability, l_inner), Ref(r_region, r_mutability, r_inner)) =>
+      l_region == r_region &&
+      l_mutability == r_mutability &&
+      self.types_equal(l_inner, r_inner)
     (Forall(l_var, l_kind, l_body), Forall(r_var, r_kind, r_body)) => {
       if l_kind != r_kind {
         return false
@@ -361,6 +365,7 @@ pub fn MetaEnv::occurs_check_evar(
     Var(_) => false
     Arrow(from, to) =>
       self.occurs_check_evar(evar, from) || self.occurs_check_evar(evar, to)
+    Ref(_, _, inner) => self.occurs_check_evar(evar, inner)
     App(func, arg) =>
       self.occurs_check_evar(evar, func) || self.occurs_check_evar(evar, arg)
     Forall(_, _, body) => self.occurs_check_evar(evar, body)
@@ -425,6 +430,19 @@ pub fn TypeCheckerState::apply_substitution_to_term(
         self.apply_substitution_to_term(subst, callee, avoid),
         self.apply_substitution_to_term(subst, arg, avoid),
       )
+    BorrowShared(target) =>
+      Term::borrow_shared(self.apply_substitution_to_term(subst, target, avoid))
+    BorrowMut(target) =>
+      Term::borrow_mut(self.apply_substitution_to_term(subst, target, avoid))
+    Deref(inner) =>
+      Term::deref(self.apply_substitution_to_term(subst, inner, avoid))
+    Assign(target, value) =>
+      Term::assign(
+        self.apply_substitution_to_term(subst, target, avoid),
+        self.apply_substitution_to_term(subst, value, avoid),
+      )
+    Move(inner) =>
+      Term::move_term(self.apply_substitution_to_term(subst, inner, avoid))
     TyLam(name, kind, body) => {
       let avoid = avoid..add(name)
       Term::tylam(
@@ -549,6 +567,12 @@ pub fn TypeCheckerState::instantiate_term(
     }
     App(callee, arg) =>
       Term::app(self.instantiate_term(callee), self.instantiate_term(arg))
+    BorrowShared(target) => Term::borrow_shared(self.instantiate_term(target))
+    BorrowMut(target) => Term::borrow_mut(self.instantiate_term(target))
+    Deref(inner) => Term::deref(self.instantiate_term(inner))
+    Assign(target, value) =>
+      Term::assign(self.instantiate_term(target), self.instantiate_term(value))
+    Move(inner) => Term::move_term(self.instantiate_term(inner))
     Lam(arg, ty, body) =>
       Term::lam(arg, self.instantiate_type(ty), self.instantiate_term(body))
     TyApp(term, ty) =>
@@ -1236,6 +1260,12 @@ fn substitute_type_impl(
         substitute_type_impl(from, target, replacement, seen),
         substitute_type_impl(to, target, replacement, seen),
       )
+    Ref(region, mutability, inner) =>
+      Type::ref_type(
+        region,
+        mutability,
+        substitute_type_impl(inner, target, replacement, seen),
+      )
     BoundedForall(name, kind, constraints, inner) =>
       if name != target {
         Type::bounded_forall(
@@ -1628,6 +1658,17 @@ pub fn TypeCheckerState::check_kind(
     Forall(name, kind, inner) =>
       check_forall_kind(self, name, kind, inner, lenient)
     Arrow(from, to) => check_arrow_kind(self, from, to, lenient)
+    Ref(_region, _mutability, inner) => {
+      let inner_kind = match self.check_kind(inner, lenient) {
+        Ok(k) => k
+        Err(t) => return Err(t)
+      }
+      if inner_kind is Star {
+        Ok(Star)
+      } else {
+        Err(KindMismatch(Star, inner_kind))
+      }
+    }
     Never => Ok(Star)
     Tuple(types) => check_tuple_kind(self, types, lenient)
   }
@@ -1645,6 +1686,8 @@ pub fn Type::alpha_rename(self : Type, from : String, to : String) -> Type {
     Var(name) if name == from => Var(to)
     Arrow(inner_from, inner_to) =>
       Arrow(inner_from.alpha_rename(from, to), inner_to.alpha_rename(from, to))
+    Ref(region, mutability, inner) =>
+      Ref(region, mutability, inner.alpha_rename(from, to))
     Forall(name, kind, inner) if name != from =>
       Forall(name, kind, inner.alpha_rename(from, to))
     Lam(name, kind, inner) if name != from =>
@@ -1928,6 +1971,20 @@ pub fn TypeCheckerState::unify_types(
 
   match (left, right) {
     (
+      Ref(left_region, left_mutability, left_inner),
+      Ref(right_region, right_mutability, right_inner),
+    ) => {
+      if left_region != right_region || left_mutability != right_mutability {
+        return Err(TypeMismatch(left, right))
+      }
+      worklist.push(Constraint::type_eq(left_inner, right_inner))
+      return Ok(())
+    }
+    _ => ()
+  }
+
+  match (left, right) {
+    (
       Forall(left_name, left_kind, left_body),
       Forall(right_name, right_kind, right_body),
     ) => {
@@ -2160,6 +2217,7 @@ pub fn Type::occurs_check(self : Type, var_name : String) -> Bool {
   match self {
     Var(name) => name == var_name
     Arrow(from, to) => from.occurs_check(var_name) || to.occurs_check(var_name)
+    Ref(_, _, inner) => inner.occurs_check(var_name)
     Forall(name, _, body) =>
       if name == var_name {
         false
@@ -2264,6 +2322,12 @@ pub fn TypeCheckerState::apply_substitution(
           apply_substitution_impl(state, subst, from, visited, blocked),
           apply_substitution_impl(state, subst, to, visited, blocked),
         )
+      Ref(region, mutability, inner) =>
+        Type::ref_type(
+          region,
+          mutability,
+          apply_substitution_impl(state, subst, inner, visited, blocked),
+        )
       Forall(name, kind, body) =>
         Type::forall(
           name,
@@ -2365,6 +2429,45 @@ pub fn TypeCheckerState::check_type(
   }
   if !(expected_kind is Star) {
     return Err(KindMismatch(Star, expected_kind))
+  }
+
+  // Native borrow term checking.
+  match (term, expected_type) {
+    (BorrowShared(target), Ref(_, Shared, expected_inner)) =>
+      match self.check_type(target, expected_inner) {
+        Ok(result) => {
+          let subst = result.subst
+          return Ok({ ty: self.apply_substitution(subst, expected_type), subst })
+        }
+        Err(t) => return Err(t)
+      }
+    (BorrowMut(target), Ref(_, Mutable, expected_inner)) =>
+      match self.check_type(target, expected_inner) {
+        Ok(result) => {
+          let subst = result.subst
+          return Ok({ ty: self.apply_substitution(subst, expected_type), subst })
+        }
+        Err(t) => return Err(t)
+      }
+    (Deref(inner), _) => {
+      let inferred = match infer_deref_type(self, inner) {
+        Ok(ty) => ty
+        Err(t) => return Err(t)
+      }
+      if self.is_assignable_to(inferred, expected_type) {
+        return Ok({ ty: expected_type, subst: Map::new() })
+      }
+      return Err(TypeMismatch(expected_type, inferred))
+    }
+    (Assign(target, value), Tuple(expected_elements)) =>
+      if expected_elements.length() == 0 {
+        match infer_assign_type(self, target, value) {
+          Ok(_) => return Ok({ ty: expected_type, subst: Map::new() })
+          Err(t) => return Err(t)
+        }
+      }
+    (Move(inner), _) => return self.check_type(inner, expected_type)
+    _ => ()
   }
 
   // Lambda checking against arrows.
@@ -3456,6 +3559,133 @@ fn infer_unfold_type(
 }
 
 ///|
+fn native_place_from_term_for_typing(term : Term) -> Place? {
+  match term {
+    Var(name) => Some(Place::root(name))
+    Con(name, _) => Some(Place::root(name))
+    Project(base, label) =>
+      match native_place_from_term_for_typing(base) {
+        Some(place) => Some(place.field(label))
+        None => None
+      }
+    TupleProject(base, index) =>
+      match native_place_from_term_for_typing(base) {
+        Some(place) => Some(place.tuple_index(index))
+        None => None
+      }
+    Deref(inner) =>
+      match native_place_from_term_for_typing(inner) {
+        Some(place) => Some(place.deref_place())
+        None => None
+      }
+    App(callee, arg) =>
+      match callee {
+        Var("deref") | Var("deref_place") =>
+          match native_place_from_term_for_typing(arg) {
+            Some(place) => Some(place.deref_place())
+            None => None
+          }
+        _ => None
+      }
+    Fold(_, inner) => native_place_from_term_for_typing(inner)
+    Unfold(inner) => native_place_from_term_for_typing(inner)
+    _ => None
+  }
+}
+
+///|
+fn assignment_place_for_error(target : Term) -> Place {
+  match native_place_from_term_for_typing(target) {
+    Some(place) => place
+    None => Place::root("<assign-target>")
+  }
+}
+
+///|
+fn infer_borrow_type(
+  state : TypeCheckerState,
+  target : Term,
+  mutability : Mutability,
+  op_name : String,
+) -> Result[Type, TypingError] {
+  let target_ty = match state.infer_type(target) {
+    Ok(ty) => ty
+    Err(t) => return Err(t)
+  }
+  if native_place_from_term_for_typing(target) is None {
+    return Err(
+      InvalidBorrowTarget(op_name + " target is not a valid place expression"),
+    )
+  }
+
+  let target_kind = match state.check_kind(target_ty, true) {
+    Ok(k) => k
+    Err(t) => return Err(t)
+  }
+  if !(target_kind is Star) {
+    return Err(KindMismatch(Star, target_kind))
+  }
+
+  Ok(Type::ref_type(Region::static_region(), mutability, target_ty))
+}
+
+///|
+fn infer_deref_type(
+  state : TypeCheckerState,
+  term : Term,
+) -> Result[Type, TypingError] {
+  let term_ty = match state.infer_type(term) {
+    Ok(ty) => ty
+    Err(t) => return Err(t)
+  }
+  let term_ty = state.normalize_type(term_ty)
+  match term_ty {
+    Ref(_, _, inner) => Ok(inner)
+    _ =>
+      Err(InvalidBorrowTarget("deref target is not a valid place expression"))
+  }
+}
+
+///|
+fn infer_assign_type(
+  state : TypeCheckerState,
+  target : Term,
+  value : Term,
+) -> Result[Type, TypingError] {
+  if native_place_from_term_for_typing(target) is None {
+    return Err(
+      InvalidBorrowTarget("assign target is not a valid place expression"),
+    )
+  }
+
+  let target_ty = match state.infer_type(target) {
+    Ok(ty) => ty
+    Err(t) => return Err(t)
+  }
+  let target_ty = state.normalize_type(target_ty)
+
+  match target_ty {
+    Ref(_, Mutable, inner) =>
+      match state.check_type(value, inner) {
+        Ok(_) => Ok(Type::unit())
+        Err(t) => Err(t)
+      }
+    Ref(_, Shared, _inner) =>
+      Err(AssignToImmutable(assignment_place_for_error(target)))
+    _ =>
+      Err(InvalidBorrowTarget("assign target is not a valid place expression"))
+  }
+}
+
+///|
+fn infer_move_type(
+  state : TypeCheckerState,
+  term : Term,
+) -> Result[Type, TypingError] {
+  state.infer_type(term)
+}
+
+///|
 fn infer_tuple_type(
   state : TypeCheckerState,
   elements : Array[Term],
@@ -3505,6 +3735,13 @@ pub fn TypeCheckerState::infer_type(
     Con(_, ty) => Ok(ty)
     Lam(arg, arg_ty, body) => infer_lam_type(self, arg, arg_ty, body)
     App(callee, arg) => infer_app_type(self, callee, arg)
+    BorrowShared(target) =>
+      infer_borrow_type(self, target, Mutability::shared(), "borrow_shared")
+    BorrowMut(target) =>
+      infer_borrow_type(self, target, Mutability::mutable(), "borrow_mut")
+    Deref(inner) => infer_deref_type(self, inner)
+    Assign(target, value) => infer_assign_type(self, target, value)
+    Move(inner) => infer_move_type(self, inner)
     Let(name, value, body) => infer_let_type(self, name, value, body)
     TyLam(name, kind, body) => infer_tylam_type(self, name, kind, body)
     TyApp(term, ty) => infer_tyapp_type(self, term, ty)
@@ -3734,6 +3971,12 @@ fn replace_enum_self_refs(
         replace_enum_self_refs(from, enum_name, enum_args, mu_var),
         replace_enum_self_refs(to, enum_name, enum_args, mu_var),
       )
+    Ref(region, mutability, inner) =>
+      Ref(
+        region,
+        mutability,
+        replace_enum_self_refs(inner, enum_name, enum_args, mu_var),
+      )
     App(func, arg) =>
       App(
         replace_enum_self_refs(func, enum_name, enum_args, mu_var),
@@ -3961,6 +4204,8 @@ fn normalize_type_impl(
         normalize_type_impl(state, from, seen),
         normalize_type_impl(state, to, seen),
       )
+    Ref(region, mutability, inner) =>
+      Ref(region, mutability, normalize_type_impl(state, inner, seen))
     Forall(name, kind, body) =>
       Forall(name, kind, normalize_type_impl(state, body, seen))
     BoundedForall(name, kind, constraints, body) =>
@@ -4249,6 +4494,8 @@ pub fn TypeCheckerState::rename_type(
           rename_type_impl(from, ren, bound),
           rename_type_impl(to, ren, bound),
         )
+      Ref(region, mutability, inner) =>
+        Type::ref_type(region, mutability, rename_type_impl(inner, ren, bound))
       App(func, arg) =>
         Type::app(
           rename_type_impl(func, ren, bound),
@@ -4347,6 +4594,12 @@ pub fn TypeCheckerState::rename_term(
           rename_type_with_bound(from, ren, bound),
           rename_type_with_bound(to, ren, bound),
         )
+      Ref(region, mutability, inner) =>
+        Type::ref_type(
+          region,
+          mutability,
+          rename_type_with_bound(inner, ren, bound),
+        )
       App(func, arg) =>
         Type::app(
           rename_type_with_bound(func, ren, bound),
@@ -4443,6 +4696,17 @@ pub fn TypeCheckerState::rename_term(
           rename_term_impl(state, callee, ren, bound),
           rename_term_impl(state, arg, ren, bound),
         )
+      BorrowShared(target) =>
+        Term::borrow_shared(rename_term_impl(state, target, ren, bound))
+      BorrowMut(target) =>
+        Term::borrow_mut(rename_term_impl(state, target, ren, bound))
+      Deref(inner) => Term::deref(rename_term_impl(state, inner, ren, bound))
+      Assign(target, value) =>
+        Term::assign(
+          rename_term_impl(state, target, ren, bound),
+          rename_term_impl(state, value, ren, bound),
+        )
+      Move(inner) => Term::move_term(rename_term_impl(state, inner, ren, bound))
       TyLam(name, kind, body) => {
         let bound = bound..add(name)
         Term::tylam(name, kind, rename_term_impl(state, body, ren, bound))
@@ -4763,6 +5027,7 @@ pub fn TypeCheckerState::compute_free_types(
         go(from, bound, type_vars, type_cons, traits, labels)
         go(to, bound, type_vars, type_cons, traits, labels)
       }
+      Ref(_, _, inner) => go(inner, bound, type_vars, type_cons, traits, labels)
       App(func, arg) => {
         go(func, bound, type_vars, type_cons, traits, labels)
         go(arg, bound, type_vars, type_cons, traits, labels)
@@ -4930,6 +5195,36 @@ pub fn TypeCheckerState::compute_free_terms(
           type_cons,
         )
       }
+      BorrowShared(target) =>
+        go(
+          state, target, bound, terms, constructors, traits, dicts, labels, type_vars,
+          type_cons,
+        )
+      BorrowMut(target) =>
+        go(
+          state, target, bound, terms, constructors, traits, dicts, labels, type_vars,
+          type_cons,
+        )
+      Deref(inner) =>
+        go(
+          state, inner, bound, terms, constructors, traits, dicts, labels, type_vars,
+          type_cons,
+        )
+      Assign(target, value) => {
+        go(
+          state, target, bound, terms, constructors, traits, dicts, labels, type_vars,
+          type_cons,
+        )
+        go(
+          state, value, bound, terms, constructors, traits, dicts, labels, type_vars,
+          type_cons,
+        )
+      }
+      Move(inner) =>
+        go(
+          state, inner, bound, terms, constructors, traits, dicts, labels, type_vars,
+          type_cons,
+        )
       TyLam(name, _kind, body) =>
         go(
           state,
@@ -6017,6 +6312,17 @@ pub fn Type::arrow(from : Type, to : Type) -> Type {
 }
 
 ///|
+/// Description: Constructs a native borrow reference type.
+/// Example: `let _ = Type::ref_type(Region::named("r"), Mutability::shared(), Type::con("Int"))`
+pub fn Type::ref_type(
+  region : Region,
+  mutability : Mutability,
+  inner : Type,
+) -> Type {
+  Ref(region, mutability, inner)
+}
+
+///|
 /// Description: Constructs a forall type.
 /// Example: `let _ = Type::forall("A", Star, Type::var_type("A"))`
 pub fn Type::forall(name : String, kind : Kind, body : Type) -> Type {
@@ -6103,6 +6409,41 @@ pub fn Term::lam(arg : String, ty : Type, body : Term) -> Term {
 /// Example: `let _ = Term::app(Term::var_term("f"), Term::unit())`
 pub fn Term::app(callee : Term, arg : Term) -> Term {
   App(callee, arg)
+}
+
+///|
+/// Description: Constructs a native shared-borrow term.
+/// Example: `let _ = Term::borrow_shared(Term::var_term("x"))`
+pub fn Term::borrow_shared(target : Term) -> Term {
+  BorrowShared(target)
+}
+
+///|
+/// Description: Constructs a native mutable-borrow term.
+/// Example: `let _ = Term::borrow_mut(Term::var_term("x"))`
+pub fn Term::borrow_mut(target : Term) -> Term {
+  BorrowMut(target)
+}
+
+///|
+/// Description: Constructs a native dereference term.
+/// Example: `let _ = Term::deref(Term::var_term("p"))`
+pub fn Term::deref(term : Term) -> Term {
+  Deref(term)
+}
+
+///|
+/// Description: Constructs a native assignment term.
+/// Example: `let _ = Term::assign(Term::var_term("p"), Term::unit())`
+pub fn Term::assign(target : Term, value : Term) -> Term {
+  Assign(target, value)
+}
+
+///|
+/// Description: Constructs a native move term.
+/// Example: `let _ = Term::move_term(Term::var_term("x"))`
+pub fn Term::move_term(term : Term) -> Term {
+  Move(term)
 }
 
 ///|

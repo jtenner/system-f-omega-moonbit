@@ -208,6 +208,11 @@ fn place_from_term(term : Term) -> Place? {
           }
         _ => None
       }
+    Deref(inner) =>
+      match place_from_term(inner) {
+        Some(place) => Some(place.deref_place())
+        None => None
+      }
     Fold(_, inner) => place_from_term(inner)
     Unfold(inner) => place_from_term(inner)
     _ => None
@@ -373,6 +378,31 @@ fn borrow_operation_from_intrinsic_binary_call(
 ///|
 fn borrow_operation_from_term(term : Term) -> BorrowOperation? {
   match term {
+    BorrowShared(target) =>
+      match place_from_term(target) {
+        Some(place) => Some(BorrowSharedOperation(place))
+        None => Some(InvalidTargetOperation("borrow_shared"))
+      }
+    BorrowMut(target) =>
+      match place_from_term(target) {
+        Some(place) => Some(BorrowMutOperation(place))
+        None => Some(InvalidTargetOperation("borrow_mut"))
+      }
+    Deref(target) =>
+      match place_from_term(target) {
+        Some(place) => Some(UseOperation(place))
+        None => Some(InvalidTargetOperation("deref"))
+      }
+    Assign(target, _value) =>
+      match place_from_term(target) {
+        Some(place) => Some(AssignMutableOperation(place))
+        None => Some(InvalidTargetOperation("assign"))
+      }
+    Move(target) =>
+      match place_from_term(target) {
+        Some(place) => Some(MoveOperation(place))
+        None => Some(InvalidTargetOperation("move"))
+      }
     Con(name, _) =>
       match parse_borrow_operation_from_constructor_name(name) {
         Some(operation) => Some(operation)
@@ -598,6 +628,18 @@ fn lower_term_into_ir(
       cursor = lower_term_into_ir(callee, scope_depth + 1, cursor, nodes)
       cursor = lower_term_into_ir(arg, scope_depth + 1, cursor, nodes)
     }
+    BorrowShared(target) =>
+      cursor = lower_term_into_ir(target, scope_depth + 1, cursor, nodes)
+    BorrowMut(target) =>
+      cursor = lower_term_into_ir(target, scope_depth + 1, cursor, nodes)
+    Deref(inner) =>
+      cursor = lower_term_into_ir(inner, scope_depth + 1, cursor, nodes)
+    Assign(target, value) => {
+      cursor = lower_term_into_ir(target, scope_depth + 1, cursor, nodes)
+      cursor = lower_term_into_ir(value, scope_depth + 1, cursor, nodes)
+    }
+    Move(inner) =>
+      cursor = lower_term_into_ir(inner, scope_depth + 1, cursor, nodes)
     Let(_, value, body) => {
       cursor = lower_term_into_ir(value, scope_depth + 1, cursor, nodes)
       cursor = lower_term_into_ir(body, scope_depth + 1, cursor, nodes)

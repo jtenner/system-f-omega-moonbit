@@ -69,6 +69,24 @@ fn type_to_ascii(ty : Type, prec : Int) -> String {
       let text = type_to_ascii(from_ty, 1) + " -> " + type_to_ascii(to_ty, 0)
       parenthesize_if(text, prec > 0)
     }
+    Ref(region, mutability, inner) => {
+      let mutability_text = match mutability {
+        Shared => "shared"
+        Mutable => "mut"
+      }
+      let region_text = match region {
+        Named(name) => name
+        Infer(id) => "?" + id.to_string()
+        Static => "static"
+      }
+      let text = "&" +
+        mutability_text +
+        "[" +
+        region_text +
+        "] " +
+        type_to_ascii(inner, 2)
+      parenthesize_if(text, prec > 1)
+    }
     Forall(name, kind, body) => {
       let text = "forall " +
         name +
@@ -153,6 +171,20 @@ fn type_to_pretty(
       let (to_text, next2) = type_to_pretty(to_ty, type_env, next1, 0)
       let text = from_text + " → " + to_text
       (parenthesize_if(text, prec > 0), next2)
+    }
+    Ref(region, mutability, inner) => {
+      let (inner_text, next1) = type_to_pretty(inner, type_env, next_type_id, 2)
+      let mutability_text = match mutability {
+        Shared => ""
+        Mutable => "mut "
+      }
+      let region_text = match region {
+        Named(name) => name
+        Infer(id) => "?" + id.to_string()
+        Static => "static"
+      }
+      let text = "&" + mutability_text + region_text + " " + inner_text
+      (parenthesize_if(text, prec > 1), next1)
     }
     Forall(name, kind, body) => {
       let (pretty_name, next1) = fresh_pretty_type_name(next_type_id)
@@ -353,6 +385,26 @@ fn term_to_ascii(term : Term, prec : Int) -> String {
       let text = term_to_ascii(fn_term, 1) + " " + term_to_ascii(arg_term, 2)
       parenthesize_if(text, prec > 1)
     }
+    BorrowShared(target) => {
+      let text = "borrow_shared " + term_to_ascii(target, 2)
+      parenthesize_if(text, prec > 1)
+    }
+    BorrowMut(target) => {
+      let text = "borrow_mut " + term_to_ascii(target, 2)
+      parenthesize_if(text, prec > 1)
+    }
+    Deref(inner) => {
+      let text = "*" + term_to_ascii(inner, 2)
+      parenthesize_if(text, prec > 1)
+    }
+    Assign(target, value) => {
+      let text = term_to_ascii(target, 2) + " := " + term_to_ascii(value, 0)
+      parenthesize_if(text, prec > 0)
+    }
+    Move(inner) => {
+      let text = "move " + term_to_ascii(inner, 2)
+      parenthesize_if(text, prec > 1)
+    }
     Let(name, value, body) => {
       let text = "let " +
         name +
@@ -511,6 +563,44 @@ fn term_to_pretty(
       )
       let text = fn_text + " " + arg_text
       (parenthesize_if(text, prec > 1), next2)
+    }
+    BorrowShared(target) => {
+      let (target_text, next1) = term_to_pretty(
+        target, type_env, next_type_id, 2, indent,
+      )
+      let text = "borrow_shared " + target_text
+      (parenthesize_if(text, prec > 1), next1)
+    }
+    BorrowMut(target) => {
+      let (target_text, next1) = term_to_pretty(
+        target, type_env, next_type_id, 2, indent,
+      )
+      let text = "borrow_mut " + target_text
+      (parenthesize_if(text, prec > 1), next1)
+    }
+    Deref(inner) => {
+      let (inner_text, next1) = term_to_pretty(
+        inner, type_env, next_type_id, 2, indent,
+      )
+      let text = "*" + inner_text
+      (parenthesize_if(text, prec > 1), next1)
+    }
+    Assign(target, value) => {
+      let (target_text, next1) = term_to_pretty(
+        target, type_env, next_type_id, 2, indent,
+      )
+      let (value_text, next2) = term_to_pretty(
+        value, type_env, next1, 0, indent,
+      )
+      let text = target_text + " := " + value_text
+      (parenthesize_if(text, prec > 0), next2)
+    }
+    Move(inner) => {
+      let (inner_text, next1) = term_to_pretty(
+        inner, type_env, next_type_id, 2, indent,
+      )
+      let text = "move " + inner_text
+      (parenthesize_if(text, prec > 1), next1)
     }
     Let(name, value, body) => {
       let (value_text, next1) = term_to_pretty(
@@ -769,6 +859,26 @@ fn type_to_repr(ty : Type) -> Repr {
         (None, type_to_repr(from_ty)),
         (None, type_to_repr(to_ty)),
       ])
+    Ref(region, mutability, inner) =>
+      Repr::ctor("Ref", [
+        (
+          Some("region"),
+          match region {
+            Named(name) => Repr::ctor("Named", [(None, Repr::string(name))])
+            Infer(id) =>
+              Repr::ctor("Infer", [(None, Repr::string(id.to_string()))])
+            Static => Repr::ctor("Static", [])
+          },
+        ),
+        (
+          Some("mutability"),
+          match mutability {
+            Shared => Repr::ctor("Shared", [])
+            Mutable => Repr::ctor("Mutable", [])
+          },
+        ),
+        (Some("inner"), type_to_repr(inner)),
+      ])
     Forall(name, kind, body) =>
       Repr::ctor("Forall", [
         (Some("name"), Repr::string(name)),
@@ -842,6 +952,17 @@ fn term_to_repr(term : Term) -> Repr {
         (Some("fn_term"), term_to_repr(fn_term)),
         (Some("arg_term"), term_to_repr(arg_term)),
       ])
+    BorrowShared(target) =>
+      Repr::ctor("BorrowShared", [(Some("target"), term_to_repr(target))])
+    BorrowMut(target) =>
+      Repr::ctor("BorrowMut", [(Some("target"), term_to_repr(target))])
+    Deref(inner) => Repr::ctor("Deref", [(Some("inner"), term_to_repr(inner))])
+    Assign(target, value) =>
+      Repr::ctor("Assign", [
+        (Some("target"), term_to_repr(target)),
+        (Some("value"), term_to_repr(value)),
+      ])
+    Move(inner) => Repr::ctor("Move", [(Some("inner"), term_to_repr(inner))])
     Let(name, value, body) =>
       Repr::ctor("Let", [
         (Some("name"), Repr::string(name)),

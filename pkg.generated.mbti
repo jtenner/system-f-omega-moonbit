@@ -344,6 +344,11 @@ pub enum Term {
   Con(String, Type)
   Lam(String, Type, Term)
   App(Term, Term)
+  BorrowShared(Term)
+  BorrowMut(Term)
+  Deref(Term)
+  Assign(Term, Term)
+  Move(Term)
   Let(String, Term, Term)
   TyLam(String, Kind, Term)
   TyApp(Term, Type)
@@ -361,13 +366,18 @@ pub enum Term {
   TupleProject(Term, Int)
 }
 pub fn Term::app(Self, Self) -> Self
+pub fn Term::assign(Self, Self) -> Self
+pub fn Term::borrow_mut(Self) -> Self
+pub fn Term::borrow_shared(Self) -> Self
 pub fn Term::con(String, Type) -> Self
+pub fn Term::deref(Self) -> Self
 pub fn Term::dict(String, Type, Array[(String, Self)]) -> Self
 pub fn Term::fold(Type, Self) -> Self
 pub fn Term::inject(String, Self, Type) -> Self
 pub fn Term::lam(String, Type, Self) -> Self
 pub fn Term::let_term(String, Self, Self) -> Self
 pub fn Term::match_term(Self, Array[(Pattern, Self)]) -> Self
+pub fn Term::move_term(Self) -> Self
 pub fn Term::pretty_print(Self) -> String
 pub fn Term::project(Self, String) -> Self
 pub fn Term::record(Array[(String, Self)]) -> Self
@@ -418,6 +428,7 @@ pub enum Type {
   EVar(String)
   Never
   Arrow(Type, Type)
+  Ref(Region, Mutability, Type)
   Forall(String, Kind, Type)
   BoundedForall(String, Kind, Array[TraitConstraint], Type)
   Lam(String, Kind, Type)
@@ -444,6 +455,7 @@ pub fn Type::never() -> Self
 pub fn Type::occurs_check(Self, String) -> Bool
 pub fn Type::pretty_print(Self) -> String
 pub fn Type::record(Array[(String, Self)]) -> Self
+pub fn Type::ref_type(Region, Mutability, Self) -> Self
 pub fn Type::substitute_type(Self, String, Self) -> Self
 pub fn Type::tuple(Array[Self]) -> Self
 pub fn Type::unit() -> Self

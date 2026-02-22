@@ -23,6 +23,14 @@ fn collect_constructor_names_into(term : Term, names : Array[String]) -> Unit {
       collect_constructor_names_into(callee, names)
       collect_constructor_names_into(arg, names)
     }
+    BorrowShared(target) => collect_constructor_names_into(target, names)
+    BorrowMut(target) => collect_constructor_names_into(target, names)
+    Deref(inner) => collect_constructor_names_into(inner, names)
+    Assign(target, value) => {
+      collect_constructor_names_into(target, names)
+      collect_constructor_names_into(value, names)
+    }
+    Move(inner) => collect_constructor_names_into(inner, names)
     Let(_, value, body) => {
       collect_constructor_names_into(value, names)
       collect_constructor_names_into(body, names)
