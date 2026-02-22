@@ -126,6 +126,16 @@ fn borrow_operation_from_intrinsic_unary_call(
         Some(place) => Some(BorrowSharedOperation(place))
         None => Some(InvalidTargetOperation)
       }
+    "borrow_ref" =>
+      match place_from_term(target) {
+        Some(place) => Some(BorrowSharedOperation(place))
+        None => Some(InvalidTargetOperation)
+      }
+    "borrow_shared_ref" =>
+      match place_from_term(target) {
+        Some(place) => Some(BorrowSharedOperation(place))
+        None => Some(InvalidTargetOperation)
+      }
     "borrow_mut" =>
       match place_from_term(target) {
         Some(place) => Some(BorrowMutOperation(place))
@@ -141,7 +151,17 @@ fn borrow_operation_from_intrinsic_unary_call(
         Some(place) => Some(MoveOperation(place))
         None => Some(InvalidTargetOperation)
       }
+    "move" =>
+      match place_from_term(target) {
+        Some(place) => Some(MoveOperation(place))
+        None => Some(InvalidTargetOperation)
+      }
     "use_value" =>
+      match place_from_term(target) {
+        Some(place) => Some(UseOperation(place))
+        None => Some(InvalidTargetOperation)
+      }
+    "use" =>
       match place_from_term(target) {
         Some(place) => Some(UseOperation(place))
         None => Some(InvalidTargetOperation)
@@ -151,12 +171,27 @@ fn borrow_operation_from_intrinsic_unary_call(
         Some(place) => Some(ReleaseOperation(place))
         None => Some(InvalidTargetOperation)
       }
+    "release_borrow" =>
+      match place_from_term(target) {
+        Some(place) => Some(ReleaseOperation(place))
+        None => Some(InvalidTargetOperation)
+      }
     "assign_mutable" =>
       match place_from_term(target) {
         Some(place) => Some(AssignMutableOperation(place))
         None => Some(InvalidTargetOperation)
       }
+    "assign" =>
+      match place_from_term(target) {
+        Some(place) => Some(AssignMutableOperation(place))
+        None => Some(InvalidTargetOperation)
+      }
     "assign_immutable" =>
+      match place_from_term(target) {
+        Some(place) => Some(AssignImmutableOperation(place))
+        None => Some(InvalidTargetOperation)
+      }
+    "assign_const" =>
       match place_from_term(target) {
         Some(place) => Some(AssignImmutableOperation(place))
         None => Some(InvalidTargetOperation)
@@ -175,13 +210,28 @@ fn borrow_operation_from_intrinsic_binary_call(
   value : Term,
 ) -> BorrowOperation? {
   ignore(value)
+  match borrow_operation_from_intrinsic_unary_call(name, target) {
+    Some(operation) => return Some(operation)
+    None => ()
+  }
+
   match name {
     "assign_mutable" =>
       match place_from_term(target) {
         Some(place) => Some(AssignMutableOperation(place))
         None => Some(InvalidTargetOperation)
       }
+    "assign" =>
+      match place_from_term(target) {
+        Some(place) => Some(AssignMutableOperation(place))
+        None => Some(InvalidTargetOperation)
+      }
     "assign_immutable" =>
+      match place_from_term(target) {
+        Some(place) => Some(AssignImmutableOperation(place))
+        None => Some(InvalidTargetOperation)
+      }
+    "assign_const" =>
       match place_from_term(target) {
         Some(place) => Some(AssignImmutableOperation(place))
         None => Some(InvalidTargetOperation)
@@ -212,6 +262,11 @@ fn borrow_operation_from_term(term : Term) -> BorrowOperation? {
       }
     _ => None
   }
+}
+
+///|
+fn owner_region_for_place(place : Place) -> Region {
+  Region::named("owner::" + place.root)
 }
 
 ///|
@@ -308,9 +363,24 @@ fn release_loans_for_place(loans : Array[Loan], place : Place) -> Unit {
 
 ///|
 fn region_constraint_for_operation(
+  node_id : Int,
   operation : BorrowOperation,
 ) -> RegionConstraint? {
   match operation {
+    BorrowSharedOperation(place) =>
+      Some(
+        RegionConstraint::outlives(
+          owner_region_for_place(place),
+          region_for_node(node_id),
+        ),
+      )
+    BorrowMutOperation(place) =>
+      Some(
+        RegionConstraint::outlives(
+          owner_region_for_place(place),
+          region_for_node(node_id),
+        ),
+      )
     RegionOutlivesOwnerOperation =>
       Some(RegionConstraint::placeholder("__err_borrow_outlives_owner"))
     RegionDanglingEscapeOperation =>
@@ -451,6 +521,18 @@ fn collect_known_region_probe_errors(
   }
 
   Ok(())
+}
+
+///|
+fn solution_has_outlives_edge(
+  solved : RegionSolution,
+  from : Region,
+  to : Region,
+) -> Bool {
+  match solved.outlives.get(from) {
+    Some(tos) => tos.contains(to)
+    None => false
+  }
 }
 
 ///|
@@ -739,7 +821,7 @@ pub fn collect_region_constraints_from_ir(
 
     match borrow_operation_from_term(node.term) {
       Some(operation) =>
-        match region_constraint_for_operation(operation) {
+        match region_constraint_for_operation(node.id, operation) {
           Some(constraint) => constraints.push(constraint)
           None => ()
         }
@@ -793,10 +875,12 @@ pub fn check_borrow_rules_placeholder(
   solved : RegionSolution,
   options : BorrowCheckerOptions,
 ) -> Result[BorrowFacts, TypingError] {
-  ignore(solved)
-
   if !options.enabled {
     return Ok(BorrowFacts::empty())
+  }
+
+  if solved.unresolved.length() > 0 {
+    return Err(RegionConstraintUnsatisfied(solved.unresolved[0]))
   }
 
   let loans : Array[Loan] = []
@@ -808,6 +892,14 @@ pub fn check_borrow_rules_placeholder(
   for node in ir.nodes {
     match borrow_operation_from_term(node.term) {
       Some(BorrowSharedOperation(place)) => {
+        if !solution_has_outlives_edge(
+            solved,
+            owner_region_for_place(place),
+            region_for_node(node.id),
+          ) {
+          return Err(BorrowOutlivesOwner(place.root))
+        }
+
         if has_overlapping_moved_place(moved_places, place) {
           return Err(MovedValueBorrow(place_key(place)))
         }
@@ -827,6 +919,14 @@ pub fn check_borrow_rules_placeholder(
         }
       }
       Some(BorrowMutOperation(place)) => {
+        if !solution_has_outlives_edge(
+            solved,
+            owner_region_for_place(place),
+            region_for_node(node.id),
+          ) {
+          return Err(BorrowOutlivesOwner(place.root))
+        }
+
         if has_overlapping_moved_place(moved_places, place) {
           return Err(MovedValueBorrow(place_key(place)))
         }

@@ -126,6 +126,11 @@ fn borrow_intrinsic_unary(name : String, target : Term) -> Term {
 }
 
 ///|
+fn borrow_intrinsic_binary(name : String, left : Term, right : Term) -> Term {
+  Term::app(Term::app(Term::var_term(name), left), right)
+}
+
+///|
 test "RED: lower_to_borrow_ir should succeed for pure unit terms" {
   let result = lower_to_borrow_ir(Term::unit())
   assert_true(result is Ok(_))
@@ -419,6 +424,126 @@ test "RED: intrinsic AST region ops should report dangling escape" {
   assert_true(
     typing_error_kind_from_analysis_result(result) == "DanglingReferenceEscape",
   )
+}
+
+///|
+test "RED: intrinsic alias names should report use-after-move for tuple projections" {
+  let state = TypeCheckerState::fresh()
+  let term = borrow_intrinsic_ops_term([
+    borrow_intrinsic_unary("move", Term::tuple_project(Term::var_term("x"), 0)),
+    borrow_intrinsic_unary("use", Term::var_term("x")),
+  ])
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(typing_error_kind_from_analysis_result(result) == "UseAfterMove")
+}
+
+///|
+test "RED: intrinsic curried borrow form should reject non-place targets" {
+  let state = TypeCheckerState::fresh()
+  let term = borrow_intrinsic_ops_term([
+    borrow_intrinsic_binary("borrow_shared", Term::unit(), Term::unit()),
+  ])
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(
+    typing_error_kind_from_analysis_result(result) == "InvalidBorrowTarget",
+  )
+}
+
+///|
+test "RED: tuple-index projection overlaps root for borrow conflicts" {
+  let state = TypeCheckerState::fresh()
+  let term = borrow_intrinsic_ops_term([
+    borrow_intrinsic_unary(
+      "borrow_mut",
+      Term::tuple_project(Term::var_term("x"), 0),
+    ),
+    borrow_intrinsic_unary("borrow_shared", Term::var_term("x")),
+  ])
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(
+    typing_error_kind_from_analysis_result(result) == "BorrowConflict",
+  )
+}
+
+///|
+test "RED: deref projection overlaps root for borrow conflicts" {
+  let state = TypeCheckerState::fresh()
+  let term = borrow_intrinsic_ops_term([
+    borrow_intrinsic_unary(
+      "borrow_mut",
+      Term::app(Term::var_term("deref"), Term::var_term("x")),
+    ),
+    borrow_intrinsic_unary("borrow_shared", Term::var_term("x")),
+  ])
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(
+    typing_error_kind_from_analysis_result(result) == "BorrowConflict",
+  )
+}
+
+///|
+test "RED: mixed scenarios should prefer first borrow-rule violation by operation order" {
+  let state = TypeCheckerState::fresh()
+  let term = borrow_intrinsic_ops_term([
+    borrow_intrinsic_unary("borrow_mut", Term::var_term("x")),
+    borrow_intrinsic_unary(
+      "borrow_shared",
+      Term::project(Term::var_term("x"), "field"),
+    ),
+    borrow_intrinsic_unary("move", Term::var_term("x")),
+    borrow_intrinsic_unary("use", Term::var_term("x")),
+  ])
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(
+    typing_error_kind_from_analysis_result(result) == "BorrowConflict",
+  )
+}
+
+///|
+test "RED: mixed scenarios should prefer solver-stage region errors before borrow-rule conflicts" {
+  let state = TypeCheckerState::fresh()
+  let term = borrow_intrinsic_ops_term([
+    Term::var_term("region_unsatisfied"),
+    borrow_intrinsic_unary("borrow_mut", Term::var_term("x")),
+    borrow_intrinsic_unary(
+      "borrow_shared",
+      Term::project(Term::var_term("x"), "field"),
+    ),
+  ])
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(result is Err(RegionConstraintUnsatisfied(_)))
+  match result {
+    Err(RegionConstraintUnsatisfied(constraint)) =>
+      assert_true(
+        constraint ==
+        RegionConstraint::placeholder("__err_region_constraint_unsatisfied"),
+      )
+    _ => panic()
+  }
 }
 
 ///|

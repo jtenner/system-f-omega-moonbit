@@ -150,6 +150,33 @@ test "collect_region_constraints_from_ir follows scope depth instead of tags" {
 }
 
 ///|
+test "RED: collect_region_constraints_from_ir emits owner outlives edges for borrow operations" {
+  let ir = BorrowIr::{
+    nodes: [
+      BorrowIrNode::{
+        id: 0,
+        term: Term::con("BorrowOpBorrowSharedX", Type::unit()),
+        scope_depth: 0,
+      },
+    ],
+  }
+  let result = collect_region_constraints_from_ir(ir)
+  assert_true(result is Ok(_))
+  match result {
+    Ok(constraints) =>
+      assert_true(
+        constraints.contains(
+          RegionConstraint::outlives(
+            Region::named("owner::x"),
+            Region::infer(0),
+          ),
+        ),
+      )
+    _ => panic()
+  }
+}
+
+///|
 test "check_borrow_rules_placeholder accepts arbitrary IR nodes" {
   let result = check_borrow_rules_placeholder(
     ir_with_two_nodes(
@@ -160,6 +187,43 @@ test "check_borrow_rules_placeholder accepts arbitrary IR nodes" {
     BorrowCheckerOptions::default(),
   )
   assert_true(result is Ok(_))
+}
+
+///|
+test "RED: check_borrow_rules_placeholder enforces owner outlives edges from solved graph" {
+  let ir = BorrowIr::{
+    nodes: [
+      BorrowIrNode::{
+        id: 0,
+        term: Term::con("BorrowOpBorrowSharedX", Type::unit()),
+        scope_depth: 0,
+      },
+    ],
+  }
+
+  let missing = check_borrow_rules_placeholder(
+    ir,
+    RegionSolution::empty(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(missing is Err(BorrowOutlivesOwner(_)))
+  match missing {
+    Err(BorrowOutlivesOwner(owner)) => assert_true(owner == "x")
+    _ => panic()
+  }
+
+  let owner_outlives : Set[Region] = Set::new()
+  owner_outlives.add(Region::infer(0))
+  let solved = RegionSolution::{
+    outlives: Map::from_array([(Region::named("owner::x"), owner_outlives)]),
+    unresolved: [],
+  }
+  let allowed = check_borrow_rules_placeholder(
+    ir,
+    solved,
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(allowed is Ok(_))
 }
 
 ///|
@@ -237,7 +301,32 @@ test "solve_region_constraints reports unsatisfied placeholder and solves struct
 }
 
 ///|
-test "check_borrow_rules_placeholder ignores solved/options and remains successful" {
+test "RED: check_borrow_rules_placeholder reports unresolved solved constraints when enabled" {
+  let solved = RegionSolution::{
+    outlives: Map::from_array([(Region::named("a"), Set::new())]),
+    unresolved: [RegionConstraint::placeholder("x")],
+  }
+
+  let enabled_opts = BorrowCheckerOptions::default()
+  let result = check_borrow_rules_placeholder(
+    ir_with_two_nodes(
+      borrow_probe_term("__err_use_after_move"),
+      borrow_probe_term("__ok_borrow"),
+    ),
+    solved,
+    enabled_opts,
+  )
+
+  assert_true(result is Err(RegionConstraintUnsatisfied(_)))
+  match result {
+    Err(RegionConstraintUnsatisfied(constraint)) =>
+      assert_true(constraint == RegionConstraint::placeholder("x"))
+    _ => panic()
+  }
+}
+
+///|
+test "disabled check_borrow_rules_placeholder remains no-op for unresolved solved constraints" {
   let solved = RegionSolution::{
     outlives: Map::from_array([(Region::named("a"), Set::new())]),
     unresolved: [RegionConstraint::placeholder("x")],
