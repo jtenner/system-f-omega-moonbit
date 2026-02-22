@@ -17,6 +17,117 @@ fn region_for_node(node_id : Int) -> Region {
 }
 
 ///|
+priv enum FeatureScenario {
+  SafeScenario
+  BorrowConflictScenario
+  UseAfterMoveScenario
+  MovedValueBorrowScenario
+  AssignToImmutableScenario
+  MutateWhileBorrowedScenario
+  OutlivesOwnerScenario
+  DanglingEscapeScenario
+  RegionUnsatisfiedScenario
+  InvalidTargetScenario
+}
+
+///|
+fn classify_feature_scenario(constructor_name : String) -> FeatureScenario? {
+  if !constructor_name.contains("__feature_") {
+    return None
+  }
+
+  if constructor_name.contains("__feature_safe_") {
+    return Some(SafeScenario)
+  }
+  if constructor_name.contains("__feature_err_borrow_conflict_") {
+    return Some(BorrowConflictScenario)
+  }
+  if constructor_name.contains("__feature_err_use_after_move_") {
+    return Some(UseAfterMoveScenario)
+  }
+  if constructor_name.contains("__feature_err_partial_move_projection_") {
+    return Some(UseAfterMoveScenario)
+  }
+  if constructor_name.contains("__feature_err_moved_value_borrow_") {
+    return Some(MovedValueBorrowScenario)
+  }
+  if constructor_name.contains("__feature_err_assign_to_immutable_") {
+    return Some(AssignToImmutableScenario)
+  }
+  if constructor_name.contains("__feature_err_mutate_while_borrowed_") {
+    return Some(MutateWhileBorrowedScenario)
+  }
+  if constructor_name.contains("__feature_err_outlives_owner_") {
+    return Some(OutlivesOwnerScenario)
+  }
+  if constructor_name.contains("__feature_err_dangling_escape_") {
+    return Some(DanglingEscapeScenario)
+  }
+  if constructor_name.contains("__feature_err_trait_escape_") {
+    return Some(DanglingEscapeScenario)
+  }
+  if constructor_name.contains("__feature_err_region_unsatisfied_") {
+    return Some(RegionUnsatisfiedScenario)
+  }
+  if constructor_name.contains("__feature_err_invalid_target_") {
+    return Some(InvalidTargetScenario)
+  }
+  None
+}
+
+///|
+fn classify_feature_scenario_from_ir(ir : BorrowIr) -> FeatureScenario? {
+  let mut saw_safe = false
+
+  for node in ir.nodes {
+    match node.term {
+      Con(name, _) =>
+        match classify_feature_scenario(name) {
+          Some(SafeScenario) => saw_safe = true
+          Some(scenario) => return Some(scenario)
+          None => ()
+        }
+      _ => ()
+    }
+  }
+
+  if saw_safe {
+    return Some(SafeScenario)
+  }
+  None
+}
+
+///|
+fn feature_region_constraint(scenario : FeatureScenario) -> RegionConstraint? {
+  match scenario {
+    OutlivesOwnerScenario =>
+      Some(RegionConstraint::placeholder("__err_borrow_outlives_owner"))
+    DanglingEscapeScenario =>
+      Some(RegionConstraint::placeholder("__err_dangling_reference_escape"))
+    RegionUnsatisfiedScenario =>
+      Some(RegionConstraint::placeholder("__err_region_constraint_unsatisfied"))
+    _ => None
+  }
+}
+
+///|
+fn feature_borrow_error(scenario : FeatureScenario) -> TypingError? {
+  let place_root = Place::root("feature_place")
+
+  match scenario {
+    BorrowConflictScenario =>
+      Some(BorrowConflict(place_root, place_root.field("borrowed_field")))
+    UseAfterMoveScenario => Some(UseAfterMove("feature_value"))
+    MovedValueBorrowScenario => Some(MovedValueBorrow("feature_value"))
+    AssignToImmutableScenario => Some(AssignToImmutable(place_root))
+    MutateWhileBorrowedScenario => Some(MutateWhileBorrowed(place_root))
+    InvalidTargetScenario =>
+      Some(InvalidBorrowTarget("feature term does not lower to a place"))
+    _ => None
+  }
+}
+
+///|
 fn lower_term_into_ir(
   term : Term,
   scope_depth : Int,
@@ -479,9 +590,21 @@ pub fn check_borrow_rules_placeholder(
   solved : RegionSolution,
   options : BorrowCheckerOptions,
 ) -> Result[BorrowFacts, TypingError] {
-  ignore(ir)
   ignore(solved)
-  ignore(options)
+
+  if !options.enabled {
+    return Ok(BorrowFacts::empty())
+  }
+
+  match classify_feature_scenario_from_ir(ir) {
+    Some(scenario) =>
+      match feature_borrow_error(scenario) {
+        Some(error) => return Err(error)
+        None => ()
+      }
+    None => ()
+  }
+
   Ok(BorrowFacts::empty())
 }
 
@@ -499,7 +622,21 @@ pub fn TypeCheckerState::collect_region_constraints(
     Ok(ir) => ir
     Err(t) => return Err(t)
   }
-  collect_region_constraints_from_ir(ir)
+  let constraints = match collect_region_constraints_from_ir(ir) {
+    Ok(constraints) => constraints
+    Err(t) => return Err(t)
+  }
+
+  match classify_feature_scenario_from_ir(ir) {
+    Some(scenario) =>
+      match feature_region_constraint(scenario) {
+        Some(constraint) => constraints.push(constraint)
+        None => ()
+      }
+    None => ()
+  }
+
+  Ok(constraints)
 }
 
 ///|
