@@ -394,3 +394,105 @@ test "analyze_borrows with use_nll variation succeeds for ordinary constructors"
   )
   assert_true(typing_error_kind_from_analysis_result(result) == "Ok")
 }
+
+///|
+test "RED: analyze_borrows isolates sibling match-branch mutable borrows" {
+  let state = TypeCheckerState::fresh()
+  let branch_borrow = borrow_intrinsic_unary("borrow_mut", Term::var_term("x"))
+  let term = Term::match_term(Term::var_term("scrutinee"), [
+    (Pattern::wildcard(), branch_borrow),
+    (Pattern::wildcard(), branch_borrow),
+  ])
+
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(typing_error_kind_from_analysis_result(result) == "Ok")
+}
+
+///|
+test "RED: analyze_borrows clears moved-place state after assignment reinitialization" {
+  let state = TypeCheckerState::fresh()
+  let term = borrow_intrinsic_ops_term([
+    borrow_intrinsic_unary("move_value", Term::var_term("x")),
+    borrow_intrinsic_binary("assign_mutable", Term::var_term("x"), Term::unit()),
+    borrow_intrinsic_unary("use_value", Term::var_term("x")),
+  ])
+
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(typing_error_kind_from_analysis_result(result) == "Ok")
+}
+
+///|
+test "RED: invalid borrow target payload includes intrinsic operation name" {
+  let state = TypeCheckerState::fresh()
+  let term = borrow_intrinsic_unary("borrow_shared", Term::unit())
+
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(result is Err(InvalidBorrowTarget(_)))
+  match result {
+    Err(InvalidBorrowTarget(message)) => {
+      assert_true(message.contains("borrow_shared"))
+      assert_true(message.contains("place"))
+    }
+    _ => panic()
+  }
+}
+
+///|
+test "RED: outlives-owner payload includes projected place path" {
+  let projected = Term::project(Term::var_term("x"), "field")
+  let ir = BorrowIr::{
+    nodes: [
+      BorrowIrNode::{
+        id: 0,
+        term: borrow_intrinsic_unary("borrow_shared", projected),
+        scope_depth: 0,
+      },
+    ],
+  }
+
+  let result = check_borrow_rules_placeholder(
+    ir,
+    RegionSolution::empty(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(result is Err(BorrowOutlivesOwner(_)))
+  match result {
+    Err(BorrowOutlivesOwner(place)) => assert_true(place == "x.field")
+    _ => panic()
+  }
+}
+
+///|
+test "RED: region placeholder payloads preserve actionable sentinel context" {
+  let outlives_owner = solve_region_constraints_placeholder([
+    RegionConstraint::placeholder("__err_borrow_outlives_owner"),
+  ])
+  assert_true(outlives_owner is Err(BorrowOutlivesOwner(_)))
+  match outlives_owner {
+    Err(BorrowOutlivesOwner(message)) =>
+      assert_true(message.contains("__err_borrow_outlives_owner"))
+    _ => panic()
+  }
+
+  let dangling_escape = solve_region_constraints_placeholder([
+    RegionConstraint::placeholder("__err_dangling_reference_escape"),
+  ])
+  assert_true(dangling_escape is Err(DanglingReferenceEscape(_)))
+  match dangling_escape {
+    Err(DanglingReferenceEscape(message)) =>
+      assert_true(message.contains("__err_dangling_reference_escape"))
+    _ => panic()
+  }
+}

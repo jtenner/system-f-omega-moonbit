@@ -25,7 +25,7 @@ priv enum BorrowOperation {
   AssignMutableOperation(Place)
   AssignImmutableOperation(Place)
   ReleaseOperation(Place)
-  InvalidTargetOperation
+  InvalidTargetOperation(String)
   RegionOutlivesOwnerOperation
   RegionDanglingEscapeOperation
   RegionUnsatisfiedOperation
@@ -52,7 +52,8 @@ fn parse_borrow_operation_from_constructor_name(
     "BorrowOpAssignImmutableX" =>
       Some(AssignImmutableOperation(Place::root("x")))
     "BorrowOpReleaseX" => Some(ReleaseOperation(Place::root("x")))
-    "BorrowOpInvalidTarget" => Some(InvalidTargetOperation)
+    "BorrowOpInvalidTarget" =>
+      Some(InvalidTargetOperation("BorrowOpInvalidTarget"))
     "BorrowOpRegionOutlivesOwner" => Some(RegionOutlivesOwnerOperation)
     "BorrowOpRegionDanglingEscape" => Some(RegionDanglingEscapeOperation)
     "BorrowOpRegionUnsatisfied" => Some(RegionUnsatisfiedOperation)
@@ -219,7 +220,7 @@ fn borrow_operation_from_intrinsic_name(name : String) -> BorrowOperation? {
     "region_outlives_owner" => Some(RegionOutlivesOwnerOperation)
     "region_dangling_escape" => Some(RegionDanglingEscapeOperation)
     "region_unsatisfied" => Some(RegionUnsatisfiedOperation)
-    "invalid_borrow_target" => Some(InvalidTargetOperation)
+    "invalid_borrow_target" => Some(InvalidTargetOperation(name))
     _ => None
   }
 }
@@ -233,77 +234,77 @@ fn borrow_operation_from_intrinsic_unary_call(
     "borrow_shared" =>
       match place_from_term(target) {
         Some(place) => Some(BorrowSharedOperation(place))
-        None => Some(InvalidTargetOperation)
+        None => Some(InvalidTargetOperation("borrow_shared"))
       }
     "borrow_ref" =>
       match place_from_term(target) {
         Some(place) => Some(BorrowSharedOperation(place))
-        None => Some(InvalidTargetOperation)
+        None => Some(InvalidTargetOperation("borrow_ref"))
       }
     "borrow_shared_ref" =>
       match place_from_term(target) {
         Some(place) => Some(BorrowSharedOperation(place))
-        None => Some(InvalidTargetOperation)
+        None => Some(InvalidTargetOperation("borrow_shared_ref"))
       }
     "borrow_mut" =>
       match place_from_term(target) {
         Some(place) => Some(BorrowMutOperation(place))
-        None => Some(InvalidTargetOperation)
+        None => Some(InvalidTargetOperation("borrow_mut"))
       }
     "move_value" =>
       match place_from_term(target) {
         Some(place) => Some(MoveOperation(place))
-        None => Some(InvalidTargetOperation)
+        None => Some(InvalidTargetOperation("move_value"))
       }
     "move_term" =>
       match place_from_term(target) {
         Some(place) => Some(MoveOperation(place))
-        None => Some(InvalidTargetOperation)
+        None => Some(InvalidTargetOperation("move_term"))
       }
     "move" =>
       match place_from_term(target) {
         Some(place) => Some(MoveOperation(place))
-        None => Some(InvalidTargetOperation)
+        None => Some(InvalidTargetOperation("move"))
       }
     "use_value" =>
       match place_from_term(target) {
         Some(place) => Some(UseOperation(place))
-        None => Some(InvalidTargetOperation)
+        None => Some(InvalidTargetOperation("use_value"))
       }
     "use" =>
       match place_from_term(target) {
         Some(place) => Some(UseOperation(place))
-        None => Some(InvalidTargetOperation)
+        None => Some(InvalidTargetOperation("use"))
       }
     "release" =>
       match place_from_term(target) {
         Some(place) => Some(ReleaseOperation(place))
-        None => Some(InvalidTargetOperation)
+        None => Some(InvalidTargetOperation("release"))
       }
     "release_borrow" =>
       match place_from_term(target) {
         Some(place) => Some(ReleaseOperation(place))
-        None => Some(InvalidTargetOperation)
+        None => Some(InvalidTargetOperation("release_borrow"))
       }
     "assign_mutable" =>
       match place_from_term(target) {
         Some(place) => Some(AssignMutableOperation(place))
-        None => Some(InvalidTargetOperation)
+        None => Some(InvalidTargetOperation("assign_mutable"))
       }
     "assign" =>
       match place_from_term(target) {
         Some(place) => Some(AssignMutableOperation(place))
-        None => Some(InvalidTargetOperation)
+        None => Some(InvalidTargetOperation("assign"))
       }
     "assign_immutable" =>
       match place_from_term(target) {
         Some(place) => Some(AssignImmutableOperation(place))
-        None => Some(InvalidTargetOperation)
+        None => Some(InvalidTargetOperation("assign_immutable"))
       }
     "assign_const" =>
       match place_from_term(target) {
         Some(place) => Some(AssignImmutableOperation(place))
-        None => Some(InvalidTargetOperation)
+        None => Some(InvalidTargetOperation("assign_const"))
       }
     "region_outlives_owner" => Some(RegionOutlivesOwnerOperation)
     "region_dangling_escape" => Some(RegionDanglingEscapeOperation)
@@ -341,29 +342,29 @@ fn borrow_operation_from_intrinsic_binary_call(
 ) -> BorrowOperation? {
   ignore(value)
   if intrinsic_name_requires_single_argument(name) {
-    return Some(InvalidTargetOperation)
+    return Some(InvalidTargetOperation(name))
   }
 
   match name {
     "assign_mutable" =>
       match place_from_term(target) {
         Some(place) => Some(AssignMutableOperation(place))
-        None => Some(InvalidTargetOperation)
+        None => Some(InvalidTargetOperation("assign_mutable"))
       }
     "assign" =>
       match place_from_term(target) {
         Some(place) => Some(AssignMutableOperation(place))
-        None => Some(InvalidTargetOperation)
+        None => Some(InvalidTargetOperation("assign"))
       }
     "assign_immutable" =>
       match place_from_term(target) {
         Some(place) => Some(AssignImmutableOperation(place))
-        None => Some(InvalidTargetOperation)
+        None => Some(InvalidTargetOperation("assign_immutable"))
       }
     "assign_const" =>
       match place_from_term(target) {
         Some(place) => Some(AssignImmutableOperation(place))
-        None => Some(InvalidTargetOperation)
+        None => Some(InvalidTargetOperation("assign_const"))
       }
     _ => None
   }
@@ -476,6 +477,35 @@ fn has_overlapping_moved_place(
     }
   }
   false
+}
+
+///|
+fn assignment_reinitializes_moved_place(
+  assigned_place : Place,
+  moved_place : Place,
+) -> Bool {
+  if assigned_place.root != moved_place.root {
+    return false
+  }
+  projections_prefix_match(assigned_place.projections, moved_place.projections)
+}
+
+///|
+fn clear_reinitialized_moved_places(
+  moved_places : Array[Place],
+  moved_place_keys : Set[String],
+  assigned_place : Place,
+) -> Unit {
+  let mut index = 0
+  while index < moved_places.length() {
+    let moved_place = moved_places[index]
+    if assignment_reinitializes_moved_place(assigned_place, moved_place) {
+      moved_place_keys.remove(place_key(moved_place))
+      ignore(moved_places.remove(index))
+    } else {
+      index = index + 1
+    }
+  }
 }
 
 ///|
@@ -605,6 +635,9 @@ fn lower_term_into_ir(
       for case_entry in cases {
         let (_, body_term) = case_entry
         cursor = lower_term_into_ir(body_term, scope_depth + 1, cursor, nodes)
+        // Boundary node at parent scope separates sibling branches.
+        nodes.push(BorrowIrNode::{ id: cursor, term: Term::unit(), scope_depth })
+        cursor = cursor + 1
       }
     }
     Fold(_, inner_term) =>
@@ -664,10 +697,16 @@ fn collect_known_region_probe_errors(
   }
 
   if saw_outlives_owner {
-    return Err(BorrowOutlivesOwner("borrow outlives owner"))
+    return Err(
+      BorrowOutlivesOwner("region placeholder: __err_borrow_outlives_owner"),
+    )
   }
   if saw_dangling_escape {
-    return Err(DanglingReferenceEscape("dangling reference escape"))
+    return Err(
+      DanglingReferenceEscape(
+        "region placeholder: __err_dangling_reference_escape",
+      ),
+    )
   }
   if saw_unsatisfied {
     return Err(
@@ -1061,7 +1100,7 @@ pub fn check_borrow_rules_placeholder(
             owner_region_for_place(place),
             region_for_node(node.id),
           ) {
-          return Err(BorrowOutlivesOwner(place.root))
+          return Err(BorrowOutlivesOwner(place_key(place)))
         }
 
         if has_overlapping_moved_place(moved_places, place) {
@@ -1089,7 +1128,7 @@ pub fn check_borrow_rules_placeholder(
             owner_region_for_place(place),
             region_for_node(node.id),
           ) {
-          return Err(BorrowOutlivesOwner(place.root))
+          return Err(BorrowOutlivesOwner(place_key(place)))
         }
 
         if has_overlapping_moved_place(moved_places, place) {
@@ -1119,17 +1158,21 @@ pub fn check_borrow_rules_placeholder(
         if has_overlapping_moved_place(moved_places, place) {
           return Err(UseAfterMove(place_key(place)))
         }
-      Some(AssignMutableOperation(place)) =>
+      Some(AssignMutableOperation(place)) => {
         if has_overlapping_loan(loans, place) {
           return Err(MutateWhileBorrowed(place))
         }
+        clear_reinitialized_moved_places(moved_places, moved_place_keys, place)
+      }
       Some(AssignImmutableOperation(place)) =>
         return Err(AssignToImmutable(place))
       Some(ReleaseOperation(place)) =>
         release_loans_for_place(loans, loan_scope_depths, place)
-      Some(InvalidTargetOperation) =>
+      Some(InvalidTargetOperation(operation_name)) =>
         return Err(
-          InvalidBorrowTarget("borrow operation target is not a place"),
+          InvalidBorrowTarget(
+            operation_name + " target is not a valid place expression",
+          ),
         )
       Some(RegionOutlivesOwnerOperation) =>
         constraints.push(
