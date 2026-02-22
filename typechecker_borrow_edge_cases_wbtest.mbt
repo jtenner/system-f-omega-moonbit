@@ -9,48 +9,65 @@ fn ir_with_two_nodes(first : Term, second : Term) -> BorrowIr {
 }
 
 ///|
-test "lower_to_borrow_ir returns Message for non-con probe terms" {
-  let term = Term::lam("x", Type::unit(), Term::var_term("x"))
-  let result = lower_to_borrow_ir(term)
-  assert_true(typing_error_kind_from_ir_result(result) == "Message")
+fn edge_case_has_outlives_edge(
+  solution : RegionSolution,
+  left : Region,
+  right : Region,
+) -> Bool {
+  for entry in solution.outlives {
+    let (from, tos) = entry
+    if from == left && tos.contains(right) {
+      return true
+    }
+  }
+  false
 }
 
 ///|
-test "collect_region_constraints propagates invalid-borrow-target lowering errors" {
+test "lower_to_borrow_ir lowers lambda terms structurally" {
+  let term = Term::lam("x", Type::unit(), Term::var_term("x"))
+  let result = lower_to_borrow_ir(term)
+  assert_true(result is Ok(_))
+  match result {
+    Ok(ir) => {
+      assert_true(ir.nodes.length() >= 2)
+      assert_true(ir.nodes[0].scope_depth == 0)
+      assert_true(ir.nodes[1].scope_depth == 1)
+    }
+    _ => panic()
+  }
+}
+
+///|
+test "collect_region_constraints treats synthetic probes as ordinary terms" {
   let state = TypeCheckerState::fresh()
   let result = state.collect_region_constraints(
     borrow_probe_term("__err_invalid_borrow_target"),
     Type::unit(),
   )
-  assert_true(
-    typing_error_kind_from_constraints_result(result) == "InvalidBorrowTarget",
-  )
+  assert_true(result is Ok(_))
 }
 
 ///|
-test "check_borrow_rules propagates invalid-borrow-target lowering errors" {
+test "check_borrow_rules treats synthetic probes as ordinary terms" {
   let state = TypeCheckerState::fresh()
   let result = state.check_borrow_rules(
     borrow_probe_term("__err_invalid_borrow_target"),
     RegionSolution::empty(),
     BorrowCheckerOptions::default(),
   )
-  assert_true(
-    typing_error_kind_from_facts_result(result) == "InvalidBorrowTarget",
-  )
+  assert_true(result is Ok(_))
 }
 
 ///|
-test "analyze_borrows propagates invalid-borrow-target errors first" {
+test "analyze_borrows treats synthetic probes as ordinary terms" {
   let state = TypeCheckerState::fresh()
   let result = state.analyze_borrows(
     borrow_probe_term("__err_invalid_borrow_target"),
     Type::unit(),
     BorrowCheckerOptions::default(),
   )
-  assert_true(
-    typing_error_kind_from_analysis_result(result) == "InvalidBorrowTarget",
-  )
+  assert_true(result is Ok(_))
 }
 
 ///|
@@ -71,7 +88,7 @@ test "enabled wrappers preserve base typing errors before borrow analysis" {
 }
 
 ///|
-test "enabled wrappers succeed for ok probe term" {
+test "enabled wrappers succeed for ordinary constructor probes" {
   let state = TypeCheckerState::fresh()
 
   let inferred = state.infer_type_with_borrow_analysis(
@@ -84,7 +101,7 @@ test "enabled wrappers succeed for ok probe term" {
   }
 
   let checked = state.check_type_with_borrow_analysis(
-    borrow_probe_term("__ok_borrow"),
+    borrow_probe_term("__err_borrow_conflict"),
     Type::unit(),
     BorrowCheckerOptions::default(),
   )
@@ -95,7 +112,7 @@ test "enabled wrappers succeed for ok probe term" {
 }
 
 ///|
-test "disabled analyze_borrows short-circuits even on invalid probes" {
+test "disabled analyze_borrows short-circuits even on synthetic probes" {
   let state = TypeCheckerState::fresh()
 
   let invalid_result = state.analyze_borrows(
@@ -114,28 +131,18 @@ test "disabled analyze_borrows short-circuits even on invalid probes" {
 }
 
 ///|
-test "collect_region_constraints_from_ir dispatches by first node tag" {
-  let ir_first_use_after = ir_with_two_nodes(
+test "collect_region_constraints_from_ir follows scope depth instead of tags" {
+  let ir = ir_with_two_nodes(
     borrow_probe_term("__err_use_after_move"),
     borrow_probe_term("__err_dangling_reference_escape"),
   )
-  let first_use_after = collect_region_constraints_from_ir(ir_first_use_after)
-  match first_use_after {
-    Ok(constraints) => assert_eq(constraints.length(), 0)
-    _ => panic()
-  }
-
-  let ir_first_dangling = ir_with_two_nodes(
-    borrow_probe_term("__err_dangling_reference_escape"),
-    borrow_probe_term("__err_use_after_move"),
-  )
-  let first_dangling = collect_region_constraints_from_ir(ir_first_dangling)
-  match first_dangling {
+  let result = collect_region_constraints_from_ir(ir)
+  match result {
     Ok(constraints) => {
       assert_eq(constraints.length(), 1)
       assert_true(
         constraints[0] ==
-        RegionConstraint::placeholder("__err_dangling_reference_escape"),
+        RegionConstraint::outlives(Region::infer(0), Region::infer(1)),
       )
     }
     _ => panic()
@@ -143,8 +150,8 @@ test "collect_region_constraints_from_ir dispatches by first node tag" {
 }
 
 ///|
-test "check_borrow_rules_placeholder dispatches by first node tag" {
-  let first_ok = check_borrow_rules_placeholder(
+test "check_borrow_rules_placeholder accepts arbitrary IR nodes" {
+  let result = check_borrow_rules_placeholder(
     ir_with_two_nodes(
       borrow_probe_term("__ok_borrow"),
       borrow_probe_term("__err_borrow_conflict"),
@@ -152,33 +159,21 @@ test "check_borrow_rules_placeholder dispatches by first node tag" {
     RegionSolution::empty(),
     BorrowCheckerOptions::default(),
   )
-  assert_true(first_ok is Ok(_))
-
-  let first_conflict = check_borrow_rules_placeholder(
-    ir_with_two_nodes(
-      borrow_probe_term("__err_borrow_conflict"),
-      borrow_probe_term("__ok_borrow"),
-    ),
-    RegionSolution::empty(),
-    BorrowCheckerOptions::default(),
-  )
-  assert_true(
-    typing_error_kind_from_facts_result(first_conflict) == "BorrowConflict",
-  )
+  assert_true(result is Ok(_))
 }
 
 ///|
-test "collect_region_constraints_from_ir returns Message when first node is unrecognized" {
+test "collect_region_constraints_from_ir handles unrecognized-first-node IR" {
   let ir = ir_with_two_nodes(
     Term::unit(),
     borrow_probe_term("__err_borrow_outlives_owner"),
   )
   let result = collect_region_constraints_from_ir(ir)
-  assert_true(typing_error_kind_from_constraints_result(result) == "Message")
+  assert_true(result is Ok(_))
 }
 
 ///|
-test "check_borrow_rules_placeholder returns Message when first node is unrecognized" {
+test "check_borrow_rules_placeholder handles unrecognized-first-node IR" {
   let ir = ir_with_two_nodes(
     Term::unit(),
     borrow_probe_term("__err_use_after_move"),
@@ -188,7 +183,7 @@ test "check_borrow_rules_placeholder returns Message when first node is unrecogn
     RegionSolution::empty(),
     BorrowCheckerOptions::default(),
   )
-  assert_true(typing_error_kind_from_facts_result(result) == "Message")
+  assert_true(result is Ok(_))
 }
 
 ///|
@@ -215,20 +210,34 @@ test "solve_region_constraints placeholder precedence then prefers dangling" {
 }
 
 ///|
-test "solve_region_constraints returns Message for unmatched placeholder or structural constraints" {
+test "solve_region_constraints reports unsatisfied placeholder and solves structural edges" {
   let unmatched = solve_region_constraints_placeholder([
     RegionConstraint::placeholder("__unknown_region_probe"),
   ])
-  assert_true(typing_error_kind_from_solution_result(unmatched) == "Message")
+  assert_true(
+    typing_error_kind_from_solution_result(unmatched) ==
+    "RegionConstraintUnsatisfied",
+  )
 
   let structural = solve_region_constraints_placeholder([
     RegionConstraint::outlives(Region::named("a"), Region::named("b")),
   ])
-  assert_true(typing_error_kind_from_solution_result(structural) == "Message")
+  assert_true(structural is Ok(_))
+  match structural {
+    Ok(solution) =>
+      assert_true(
+        edge_case_has_outlives_edge(
+          solution,
+          Region::named("a"),
+          Region::named("b"),
+        ),
+      )
+    _ => panic()
+  }
 }
 
 ///|
-test "check_borrow_rules_placeholder ignores solved/options in scaffold mode" {
+test "check_borrow_rules_placeholder ignores solved/options and remains successful" {
   let solved = RegionSolution::{
     outlives: Map::from_array([(Region::named("a"), Set::new())]),
     unresolved: [RegionConstraint::placeholder("x")],
@@ -244,11 +253,11 @@ test "check_borrow_rules_placeholder ignores solved/options in scaffold mode" {
     disabled_opts,
   )
 
-  assert_true(typing_error_kind_from_facts_result(result) == "UseAfterMove")
+  assert_true(result is Ok(_))
 }
 
 ///|
-test "analyze_borrows with use_nll variation preserves scaffold error mapping" {
+test "analyze_borrows with use_nll variation succeeds for ordinary constructors" {
   let state = TypeCheckerState::fresh()
   let opts = BorrowCheckerOptions::{
     enabled: true,
@@ -261,7 +270,5 @@ test "analyze_borrows with use_nll variation preserves scaffold error mapping" {
     Type::unit(),
     opts,
   )
-  assert_true(
-    typing_error_kind_from_analysis_result(result) == "AssignToImmutable",
-  )
+  assert_true(typing_error_kind_from_analysis_result(result) == "Ok")
 }

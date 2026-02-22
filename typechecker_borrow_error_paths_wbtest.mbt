@@ -25,19 +25,19 @@ test "new borrow-related TypingError variants are scaffolded" {
 }
 
 ///|
-test "region helper placeholders return Message errors" {
+test "region helpers expose semantic placeholder handling" {
   let ok_result = solve_region_constraints_placeholder([])
   assert_true(ok_result is Ok(_))
 
   let constraint_result = solve_region_constraints_placeholder([
     RegionConstraint::placeholder("..."),
   ])
-  assert_true(constraint_result is Err(Message(_)))
+  assert_true(constraint_result is Err(RegionConstraintUnsatisfied(_)))
 
   let checker_result = check_borrow_rules_placeholder(
     BorrowIr::{ nodes: [] },
     RegionSolution::empty(),
     BorrowCheckerOptions::default(),
   )
-  assert_true(checker_result is Err(Message(_)))
+  assert_true(checker_result is Ok(_))
 }

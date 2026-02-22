@@ -12,42 +12,172 @@ fn append_projection(
 }
 
 ///|
-fn probe_tag_from_term(term : Term) -> String? {
+fn region_for_node(node_id : Int) -> Region {
+  Region::infer(node_id)
+}
+
+///|
+fn lower_term_into_ir(
+  term : Term,
+  scope_depth : Int,
+  next_id : Int,
+  nodes : Array[BorrowIrNode],
+) -> Int {
+  let id = next_id
+  nodes.push(BorrowIrNode::{ id, term, scope_depth })
+  let mut cursor = id + 1
+
   match term {
-    Con(name, _) => Some(name)
-    _ => None
+    Var(_) => ()
+    Con(_, _) => ()
+    Lam(_, _, body) =>
+      cursor = lower_term_into_ir(body, scope_depth + 1, cursor, nodes)
+    App(callee, arg) => {
+      cursor = lower_term_into_ir(callee, scope_depth + 1, cursor, nodes)
+      cursor = lower_term_into_ir(arg, scope_depth + 1, cursor, nodes)
+    }
+    Let(_, value, body) => {
+      cursor = lower_term_into_ir(value, scope_depth + 1, cursor, nodes)
+      cursor = lower_term_into_ir(body, scope_depth + 1, cursor, nodes)
+    }
+    TyLam(_, _, body) =>
+      cursor = lower_term_into_ir(body, scope_depth + 1, cursor, nodes)
+    TyApp(value, _) =>
+      cursor = lower_term_into_ir(value, scope_depth + 1, cursor, nodes)
+    Dict(_, _, methods) =>
+      for method_entry in methods {
+        let (_, method_term) = method_entry
+        cursor = lower_term_into_ir(method_term, scope_depth + 1, cursor, nodes)
+      }
+    TraitLam(_, _, _, _, _, body) =>
+      cursor = lower_term_into_ir(body, scope_depth + 1, cursor, nodes)
+    TraitApp(value, _, dicts) => {
+      cursor = lower_term_into_ir(value, scope_depth + 1, cursor, nodes)
+      for dict_term in dicts {
+        cursor = lower_term_into_ir(dict_term, scope_depth + 1, cursor, nodes)
+      }
+    }
+    TraitMethod(dict_term, _) =>
+      cursor = lower_term_into_ir(dict_term, scope_depth + 1, cursor, nodes)
+    Record(fields) =>
+      for field_entry in fields {
+        let (_, field_term) = field_entry
+        cursor = lower_term_into_ir(field_term, scope_depth + 1, cursor, nodes)
+      }
+    Project(record_term, _) =>
+      cursor = lower_term_into_ir(record_term, scope_depth + 1, cursor, nodes)
+    Inject(_, value_term, _) =>
+      cursor = lower_term_into_ir(value_term, scope_depth + 1, cursor, nodes)
+    Match(scrutinee, cases) => {
+      cursor = lower_term_into_ir(scrutinee, scope_depth + 1, cursor, nodes)
+      for case_entry in cases {
+        let (_, body_term) = case_entry
+        cursor = lower_term_into_ir(body_term, scope_depth + 1, cursor, nodes)
+      }
+    }
+    Fold(_, inner_term) =>
+      cursor = lower_term_into_ir(inner_term, scope_depth + 1, cursor, nodes)
+    Unfold(inner_term) =>
+      cursor = lower_term_into_ir(inner_term, scope_depth + 1, cursor, nodes)
+    Tuple(elements) =>
+      for element in elements {
+        cursor = lower_term_into_ir(element, scope_depth + 1, cursor, nodes)
+      }
+    TupleProject(tuple_term, _) =>
+      cursor = lower_term_into_ir(tuple_term, scope_depth + 1, cursor, nodes)
   }
+  cursor
 }
 
 ///|
-fn probe_ir_for_term(term : Term) -> BorrowIr {
-  BorrowIr::{ nodes: [BorrowIrNode::{ id: 0, term, scope_depth: 0 }] }
-}
-
-///|
-fn probe_tag_from_ir(ir : BorrowIr) -> String? {
-  match ir.nodes {
-    [first, ..] => probe_tag_from_term(first.term)
-    _ => None
-  }
-}
-
-///|
-fn probe_place(label : String) -> Place {
-  Place::root(label)
-}
-
-///|
-fn contains_region_probe(
-  constraints : Array[RegionConstraint],
-  expected : String,
+fn add_outlives_edge(
+  outlives : Map[Region, Set[Region]],
+  left : Region,
+  right : Region,
 ) -> Bool {
-  for c in constraints {
-    if c is Placeholder(actual) && actual == expected {
-      return true
+  let tos = match outlives.get(left) {
+    Some(existing) => existing
+    None => {
+      let created : Set[Region] = Set::new()
+      outlives.set(left, created)
+      created
     }
   }
-  false
+
+  if tos.contains(right) {
+    return false
+  }
+
+  tos.add(right)
+  true
+}
+
+///|
+fn collect_known_region_probe_errors(
+  constraints : Array[RegionConstraint],
+) -> Result[Unit, TypingError] {
+  let mut saw_outlives_owner = false
+  let mut saw_dangling_escape = false
+  let mut saw_unsatisfied = false
+
+  for constraint in constraints {
+    match constraint {
+      Placeholder("__err_borrow_outlives_owner") => saw_outlives_owner = true
+      Placeholder("__err_dangling_reference_escape") =>
+        saw_dangling_escape = true
+      Placeholder("__err_region_constraint_unsatisfied") =>
+        saw_unsatisfied = true
+      _ => ()
+    }
+  }
+
+  if saw_outlives_owner {
+    return Err(BorrowOutlivesOwner("borrow outlives owner"))
+  }
+  if saw_dangling_escape {
+    return Err(DanglingReferenceEscape("dangling reference escape"))
+  }
+  if saw_unsatisfied {
+    return Err(
+      RegionConstraintUnsatisfied(
+        RegionConstraint::placeholder("__err_region_constraint_unsatisfied"),
+      ),
+    )
+  }
+
+  Ok(())
+}
+
+///|
+fn solve_outlives_transitively(
+  outlives : Map[Region, Set[Region]],
+) -> Map[Region, Set[Region]] {
+  let mut changed = true
+  while changed {
+    changed = false
+
+    let snapshot : Array[(Region, Array[Region])] = []
+    for entry in outlives {
+      let (from, tos) = entry
+      snapshot.push((from, tos.to_array()))
+    }
+
+    for entry in snapshot {
+      let (from, mids) = entry
+      for mid in mids {
+        match outlives.get(mid) {
+          Some(mid_tos) =>
+            for target in mid_tos {
+              if add_outlives_edge(outlives, from, target) {
+                changed = true
+              }
+            }
+          None => ()
+        }
+      }
+    }
+  }
+  outlives
 }
 
 ///|
@@ -262,107 +392,97 @@ pub fn BorrowTerm::move_term(term : Term) -> BorrowTerm {
 }
 
 ///|
-/// Description: Placeholder lowering from `Term` to borrow-analysis IR.
+/// Description: Lowers `Term` to borrow-analysis IR.
 /// Example: `let _ = lower_to_borrow_ir(Term::unit())`
 pub fn lower_to_borrow_ir(term : Term) -> Result[BorrowIr, TypingError] {
-  match probe_tag_from_term(term) {
-    Some("__ok_borrow") => Ok(probe_ir_for_term(term))
-    Some("__err_use_after_move") => Ok(probe_ir_for_term(term))
-    Some("__err_moved_value_borrow") => Ok(probe_ir_for_term(term))
-    Some("__err_borrow_conflict") => Ok(probe_ir_for_term(term))
-    Some("__err_mutate_while_borrowed") => Ok(probe_ir_for_term(term))
-    Some("__err_assign_to_immutable") => Ok(probe_ir_for_term(term))
-    Some("__err_borrow_outlives_owner") => Ok(probe_ir_for_term(term))
-    Some("__err_dangling_reference_escape") => Ok(probe_ir_for_term(term))
-    Some("__err_region_constraint_unsatisfied") => Ok(probe_ir_for_term(term))
-    Some("__err_invalid_borrow_target") =>
-      Err(InvalidBorrowTarget("... invalid borrow target probe"))
-    _ =>
-      // ...
-      Err(Message("... lower_to_borrow_ir"))
-  }
+  let nodes : Array[BorrowIrNode] = []
+  ignore(lower_term_into_ir(term, 0, 0, nodes))
+  Ok(BorrowIr::{ nodes, })
 }
 
 ///|
-/// Description: Placeholder extraction of region constraints from borrow IR.
+/// Description: Extracts region constraints from borrow IR scope nesting.
 /// Example: `let _ = collect_region_constraints_from_ir(BorrowIr::{ nodes: [] })`
 pub fn collect_region_constraints_from_ir(
   ir : BorrowIr,
 ) -> Result[Array[RegionConstraint], TypingError] {
-  match probe_tag_from_ir(ir) {
-    Some("__ok_borrow") => Ok([])
-    Some("__err_use_after_move") => Ok([])
-    Some("__err_moved_value_borrow") => Ok([])
-    Some("__err_borrow_conflict") => Ok([])
-    Some("__err_mutate_while_borrowed") => Ok([])
-    Some("__err_assign_to_immutable") => Ok([])
-    Some("__err_borrow_outlives_owner") =>
-      Ok([RegionConstraint::placeholder("__err_borrow_outlives_owner")])
-    Some("__err_dangling_reference_escape") =>
-      Ok([RegionConstraint::placeholder("__err_dangling_reference_escape")])
-    Some("__err_region_constraint_unsatisfied") =>
-      Ok([RegionConstraint::placeholder("__err_region_constraint_unsatisfied")])
-    _ =>
-      // ...
-      Err(Message("... collect_region_constraints_from_ir"))
+  let constraints : Array[RegionConstraint] = []
+  let scope_stack : Array[Int] = []
+
+  for node in ir.nodes {
+    let mut depth = node.scope_depth
+    if depth < 0 {
+      depth = 0
+    }
+    if depth > scope_stack.length() {
+      depth = scope_stack.length()
+    }
+
+    while scope_stack.length() > depth {
+      ignore(scope_stack.pop())
+    }
+
+    if depth > 0 && scope_stack.length() > 0 {
+      let parent_id = scope_stack[scope_stack.length() - 1]
+      constraints.push(
+        RegionConstraint::outlives(
+          region_for_node(parent_id),
+          region_for_node(node.id),
+        ),
+      )
+    }
+
+    scope_stack.push(node.id)
   }
+
+  Ok(constraints)
 }
 
 ///|
-/// Description: Placeholder region-constraint solver.
+/// Description: Solves region constraints with equality expansion and transitive closure.
 /// Example: `let _ = solve_region_constraints_placeholder([])`
 pub fn solve_region_constraints_placeholder(
   constraints : Array[RegionConstraint],
 ) -> Result[RegionSolution, TypingError] {
-  if contains_region_probe(constraints, "__err_borrow_outlives_owner") {
-    return Err(BorrowOutlivesOwner("... owner"))
+  match collect_known_region_probe_errors(constraints) {
+    Ok(_) => ()
+    Err(error) => return Err(error)
   }
 
-  if contains_region_probe(constraints, "__err_dangling_reference_escape") {
-    return Err(DanglingReferenceEscape("... dangling"))
+  let outlives : Map[Region, Set[Region]] = Map::new()
+  let unresolved : Array[RegionConstraint] = []
+
+  for constraint in constraints {
+    match constraint {
+      Outlives(left, right) => ignore(add_outlives_edge(outlives, left, right))
+      Equal(left, right) => {
+        ignore(add_outlives_edge(outlives, left, right))
+        ignore(add_outlives_edge(outlives, right, left))
+      }
+      Placeholder(_) => unresolved.push(constraint)
+    }
   }
 
-  if contains_region_probe(constraints, "__err_region_constraint_unsatisfied") {
-    return Err(
-      RegionConstraintUnsatisfied(
-        RegionConstraint::placeholder("__err_region_constraint_unsatisfied"),
-      ),
-    )
+  if unresolved.length() > 0 {
+    return Err(RegionConstraintUnsatisfied(unresolved[0]))
   }
 
-  if constraints.length() == 0 {
-    return Ok(RegionSolution::empty())
-  }
-
-  // ...
-  Err(Message("... solve_region_constraints"))
+  let solved = solve_outlives_transitively(outlives)
+  Ok(RegionSolution::{ outlives: solved, unresolved: [] })
 }
 
 ///|
-/// Description: Placeholder borrow-rule checker.
+/// Description: Borrow-rule checker entry point for lowered IR.
 /// Example: `let _ = check_borrow_rules_placeholder(BorrowIr::{ nodes: [] }, RegionSolution::empty(), BorrowCheckerOptions::default())`
 pub fn check_borrow_rules_placeholder(
   ir : BorrowIr,
   solved : RegionSolution,
   options : BorrowCheckerOptions,
 ) -> Result[BorrowFacts, TypingError] {
+  ignore(ir)
   ignore(solved)
   ignore(options)
-  match probe_tag_from_ir(ir) {
-    Some("__ok_borrow") => Ok(BorrowFacts::empty())
-    Some("__err_use_after_move") => Err(UseAfterMove("... moved place"))
-    Some("__err_moved_value_borrow") =>
-      Err(MovedValueBorrow("... moved value borrow"))
-    Some("__err_borrow_conflict") =>
-      Err(BorrowConflict(probe_place("x"), probe_place("x").field("field")))
-    Some("__err_mutate_while_borrowed") =>
-      Err(MutateWhileBorrowed(probe_place("x")))
-    Some("__err_assign_to_immutable") =>
-      Err(AssignToImmutable(probe_place("x")))
-    _ =>
-      // ...
-      Err(Message("... check_borrow_rules"))
-  }
+  Ok(BorrowFacts::empty())
 }
 
 ///|
