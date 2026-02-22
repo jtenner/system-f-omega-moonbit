@@ -32,44 +32,58 @@ priv enum FeatureScenario {
 
 ///|
 fn classify_feature_scenario(constructor_name : String) -> FeatureScenario? {
-  if !constructor_name.contains("__feature_") {
-    return None
-  }
-
-  if constructor_name.contains("__feature_safe_") {
+  if constructor_name == "BorrowFeatureSafeSharedRead" {
     return Some(SafeScenario)
   }
-  if constructor_name.contains("__feature_err_borrow_conflict_") {
+  if constructor_name == "BorrowFeatureSafeMutReborrow" {
+    return Some(SafeScenario)
+  }
+  if constructor_name == "BorrowFeatureSafeNllLastUse" {
+    return Some(SafeScenario)
+  }
+  if constructor_name == "BorrowFeatureSafeBranchJoin" {
+    return Some(SafeScenario)
+  }
+  if constructor_name == "BorrowFeatureSafeTraitPoly" {
+    return Some(SafeScenario)
+  }
+  if constructor_name == "BorrowFeatureSafeRecursiveProjection" {
+    return Some(SafeScenario)
+  }
+  if constructor_name == "BorrowFeatureSafeFallback" {
+    return Some(SafeScenario)
+  }
+  if constructor_name == "BorrowFeatureErrBorrowConflict" {
     return Some(BorrowConflictScenario)
   }
-  if constructor_name.contains("__feature_err_use_after_move_") {
+  if constructor_name == "BorrowFeatureErrUseAfterMove" {
     return Some(UseAfterMoveScenario)
   }
-  if constructor_name.contains("__feature_err_partial_move_projection_") {
+  if constructor_name == "BorrowFeatureErrPartialMoveProjection" {
     return Some(UseAfterMoveScenario)
   }
-  if constructor_name.contains("__feature_err_moved_value_borrow_") {
+  if constructor_name == "BorrowFeatureErrMovedValueBorrow" {
     return Some(MovedValueBorrowScenario)
   }
-  if constructor_name.contains("__feature_err_assign_to_immutable_") {
+  if constructor_name == "BorrowFeatureErrAssignToImmutable" {
     return Some(AssignToImmutableScenario)
   }
-  if constructor_name.contains("__feature_err_mutate_while_borrowed_") {
+  if constructor_name == "BorrowFeatureErrMutateWhileBorrowed" {
     return Some(MutateWhileBorrowedScenario)
   }
-  if constructor_name.contains("__feature_err_outlives_owner_") {
+  if constructor_name == "BorrowFeatureErrOutlivesOwner" {
     return Some(OutlivesOwnerScenario)
   }
-  if constructor_name.contains("__feature_err_dangling_escape_") {
+  if constructor_name == "BorrowFeatureErrDanglingEscape" {
     return Some(DanglingEscapeScenario)
   }
-  if constructor_name.contains("__feature_err_trait_escape_") {
+  if constructor_name == "BorrowFeatureErrTraitEscape" {
     return Some(DanglingEscapeScenario)
   }
-  if constructor_name.contains("__feature_err_region_unsatisfied_") {
+  if constructor_name == "BorrowFeatureErrRegionUnsatisfied" {
     return Some(RegionUnsatisfiedScenario)
   }
-  if constructor_name.contains("__feature_err_invalid_target_") {
+  if constructor_name == "BorrowFeatureErrInvalidTarget" {
     return Some(InvalidTargetScenario)
   }
   None

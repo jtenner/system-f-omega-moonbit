@@ -1,6 +1,6 @@
 ///|
 fn feature_term(tag : String) -> Term {
-  Term::con("__feature_" + tag, Type::unit())
+  borrow_feature_term(tag)
 }
 
 ///|

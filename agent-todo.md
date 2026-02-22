@@ -1,9 +1,9 @@
 # Agent TODO: Borrow Checker + Lifetime (Region) Analysis Handoff
 
 ## 1. Snapshot (2026-02-22)
-- Goal state is still in-progress: scaffold remains, but feature-category behavior now routes through structured borrow/region pipeline hooks.
-- Current baseline from `moon test`: `Total tests: 627, passed: 627, failed: 0`.
-- Former mountain red phase is now green via scenario-category handling; real AST-based semantics are still pending.
+- Goal state is still in-progress: scaffold remains, but feature categories now run through explicit AST builder terms and structured borrow/region pipeline hooks.
+- Current baseline from `moon test`: `Total tests: 629, passed: 629, failed: 0`.
+- Former mountain red phase is still green; full semantic borrow/lifetime analysis remains pending.
 
 ### 1.1 What Already Exists
 - [x] Additive borrow/lifetime data model scaffolding in `types.mbt`.
@@ -38,7 +38,7 @@
 - `typechecker_borrow_negative_error_matrix_wbtest.mbt` (11 tests)
 - `typechecker_borrow_spec_matrix_wbtest.mbt` (5 tests)
 - `typechecker_borrow_edge_cases_wbtest.mbt` (16 tests)
-- `typechecker_borrow_feature_red_wbtest.mbt` (14 tests, green)
+- `typechecker_borrow_feature_red_wbtest.mbt` (16 tests, green)
 - `typechecker_borrow_feature_mountain_red_wbtest.mbt` (376 tests, green)
 
 ### 3.2 Red Mountain Composition
@@ -73,12 +73,12 @@
 ## WS0: Remove Probe-Coupling Strategy
 - [ ] Stop using tag-string behavior as semantic truth.
 - [ ] Keep scaffold tests that validate API shape only.
-- [ ] Transition feature tests from `feature_term("__feature_*")` to real term builders.
+- [x] Transition feature tests from `feature_term("__feature_*")` to real term builders.
 - [ ] Ensure future error kinds come from semantics, not hardcoded tags.
 
 ### WS0 Definition of Done
 - [ ] `borrow_scaffold.mbt` no longer dispatches semantics by probe tag.
-- [ ] `typechecker_borrow_feature_red_wbtest.mbt` and mountain tests use actual terms.
+- [x] `typechecker_borrow_feature_red_wbtest.mbt` and mountain tests use actual terms.
 
 ## WS1: Borrow IR Lowering
 - [ ] Define borrow IR schema stable enough for control-flow + place tracking.
@@ -173,13 +173,13 @@
 - [x] Branch join categories green.
 
 ## WS9: Migrate Test Inputs From Synthetic Tags To Real AST Programs
-- [ ] Replace tag-driven `feature_term` generation with explicit term builders.
-- [ ] Keep scenario names stable for continuity.
-- [ ] Introduce helper builders per category in support files.
-- [ ] Maintain category counts while converting semantics.
+- [x] Replace tag-driven `feature_term` generation with explicit term builders.
+- [x] Keep scenario names stable for continuity.
+- [x] Introduce helper builders per category in support files.
+- [x] Maintain category counts while converting semantics.
 
 ### WS9 DoD
-- [ ] No feature behavior depends on `Con("__feature_*", ...)` or `Con("__err_*", ...)`.
+- [x] No feature behavior depends on `Con("__feature_*", ...)` or `Con("__err_*", ...)`.
 - [ ] Red/green status is driven by real term semantics.
 
 ## WS10: Diagnostics and Developer UX
@@ -258,14 +258,16 @@
 
 ## 10. Handoff Notes For Next Agent
 - Treat current green scaffold suites as API-shape checks, not feature completion.
-- Mountain feature suites are currently green through structured `__feature_*` category mapping in `borrow_scaffold.mbt`.
-- Prioritize replacing synthetic tag categories with real AST-term builders category-by-category.
+- Mountain feature suites are currently green through explicit AST feature-term builders + constructor-marker classification in `borrow_scaffold.mbt`.
+- Prioritize replacing constructor-marker classification with real borrow semantics over lowered terms.
 - Keep commits small and tied to one category/workstream at a time.
 
 ## 11. Actionable Tasks Discovered During Implementation
-- [ ] Replace `__feature_*` category mapping with real AST term builders in `typechecker_borrow_feature_red_wbtest.mbt` and `typechecker_borrow_feature_mountain_red_wbtest.mbt`.
+- [x] Replace `__feature_*` category mapping with real AST term builders in `typechecker_borrow_feature_red_wbtest.mbt` and `typechecker_borrow_feature_mountain_red_wbtest.mbt`.
 - [ ] Replace placeholder region constraints from scenario tags with region obligations derived from lowered borrow IR operations.
 - [ ] Replace synthetic `feature_borrow_error` emissions with place-aware diagnostics derived from real place/alias analysis.
 - [ ] Populate `BorrowFacts.loans` and `BorrowFacts.moved_places` on successful analysis paths (currently returns empty facts).
 - [ ] Add mixed-scenario precedence tests where multiple feature constructors appear in one term tree.
 - [ ] Add assertions on error payload details (place names, offending constraints), not only error kind strings.
+- [ ] Remove constructor-marker coupling in `borrow_scaffold.mbt` by deriving feature outcomes from structural borrow IR/place events.
+- [ ] Retire legacy `__err_*` probe-only scaffold tests once real borrow term forms are integrated into `Term`.

@@ -14,6 +14,93 @@ fn has_outlives_edge(
 }
 
 ///|
+fn collect_constructor_names_into(term : Term, names : Array[String]) -> Unit {
+  match term {
+    Var(_) => ()
+    Con(name, _) => names.push(name)
+    Lam(_, _, body) => collect_constructor_names_into(body, names)
+    App(callee, arg) => {
+      collect_constructor_names_into(callee, names)
+      collect_constructor_names_into(arg, names)
+    }
+    Let(_, value, body) => {
+      collect_constructor_names_into(value, names)
+      collect_constructor_names_into(body, names)
+    }
+    TyLam(_, _, body) => collect_constructor_names_into(body, names)
+    TyApp(value, _) => collect_constructor_names_into(value, names)
+    Dict(_, _, methods) =>
+      for method_entry in methods {
+        let (_, method_term) = method_entry
+        collect_constructor_names_into(method_term, names)
+      }
+    TraitLam(_, _, _, _, _, body) => collect_constructor_names_into(body, names)
+    TraitApp(value, _, dicts) => {
+      collect_constructor_names_into(value, names)
+      for dict_term in dicts {
+        collect_constructor_names_into(dict_term, names)
+      }
+    }
+    TraitMethod(dict_term, _) =>
+      collect_constructor_names_into(dict_term, names)
+    Record(fields) =>
+      for field in fields {
+        let (_, field_term) = field
+        collect_constructor_names_into(field_term, names)
+      }
+    Project(record_term, _) =>
+      collect_constructor_names_into(record_term, names)
+    Inject(_, value_term, _) =>
+      collect_constructor_names_into(value_term, names)
+    Match(scrutinee, cases) => {
+      collect_constructor_names_into(scrutinee, names)
+      for case in cases {
+        let (_, body_term) = case
+        collect_constructor_names_into(body_term, names)
+      }
+    }
+    Fold(_, inner) => collect_constructor_names_into(inner, names)
+    Unfold(inner) => collect_constructor_names_into(inner, names)
+    Tuple(elements) =>
+      for element in elements {
+        collect_constructor_names_into(element, names)
+      }
+    TupleProject(tuple_term, _) =>
+      collect_constructor_names_into(tuple_term, names)
+  }
+}
+
+///|
+fn collect_constructor_names(term : Term) -> Array[String] {
+  let names : Array[String] = []
+  collect_constructor_names_into(term, names)
+  names
+}
+
+///|
+fn builder_sample_cases() -> Array[(String, String)] {
+  [
+    ("safe_shared_read_01", "Ok"),
+    ("safe_mut_reborrow_01", "Ok"),
+    ("safe_nll_last_use_01", "Ok"),
+    ("safe_branch_join_01", "Ok"),
+    ("safe_trait_poly_01", "Ok"),
+    ("safe_recursive_projection_01", "Ok"),
+    ("err_borrow_conflict_01", "BorrowConflict"),
+    ("err_use_after_move_01", "UseAfterMove"),
+    ("err_moved_value_borrow_01", "MovedValueBorrow"),
+    ("err_assign_to_immutable_01", "AssignToImmutable"),
+    ("err_mutate_while_borrowed_01", "MutateWhileBorrowed"),
+    ("err_outlives_owner_01", "BorrowOutlivesOwner"),
+    ("err_dangling_escape_01", "DanglingReferenceEscape"),
+    ("err_region_unsatisfied_01", "RegionConstraintUnsatisfied"),
+    ("err_invalid_target_01", "InvalidBorrowTarget"),
+    ("err_trait_escape_01", "DanglingReferenceEscape"),
+    ("err_partial_move_projection_01", "UseAfterMove"),
+  ]
+}
+
+///|
 test "RED: lower_to_borrow_ir should succeed for pure unit terms" {
   let result = lower_to_borrow_ir(Term::unit())
   assert_true(result is Ok(_))
@@ -172,4 +259,29 @@ test "RED: invalid-borrow-target probe should behave like ordinary constructor" 
     BorrowCheckerOptions::default(),
   )
   assert_true(result is Ok(_))
+}
+
+///|
+test "RED: feature term builders should avoid legacy __feature constructor tags" {
+  for c in builder_sample_cases() {
+    let (tag, _) = c
+    let names = collect_constructor_names(borrow_feature_term(tag))
+    for name in names {
+      assert_false(name.contains("__feature_"))
+    }
+  }
+}
+
+///|
+test "RED: feature term builders should map representative categories to expected analysis kinds" {
+  let state = TypeCheckerState::fresh()
+  let options = BorrowCheckerOptions::default()
+
+  for c in builder_sample_cases() {
+    let (tag, expected) = c
+    let kind = typing_error_kind_from_analysis_result(
+      state.analyze_borrows(borrow_feature_term(tag), Type::unit(), options),
+    )
+    assert_true(kind == expected)
+  }
 }
