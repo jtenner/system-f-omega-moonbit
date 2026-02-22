@@ -2,7 +2,7 @@
 
 ## 1. Snapshot (2026-02-22)
 - Goal state is still in-progress: scaffold remains, but feature categories now run through explicit AST builder terms and structured borrow/region pipeline hooks.
-- Current baseline from `moon test`: `Total tests: 629, passed: 629, failed: 0`.
+- Current baseline from `moon test`: `Total tests: 637, passed: 637, failed: 0`.
 - Former mountain red phase is still green; full semantic borrow/lifetime analysis remains pending.
 
 ### 1.1 What Already Exists
@@ -13,9 +13,9 @@
 - [x] Large red suites (`feature_red` + `feature_mountain_red`) defining desired feature behavior.
 
 ### 1.2 What Is Missing (Core)
-- [ ] Real IR lowering for normal terms (currently tag-probe based).
+- [ ] Real IR lowering for normal terms (currently operation-marker based for borrow events).
 - [ ] Real region-constraint generation and solving.
-- [ ] Real borrow conflict + move checker.
+- [x] Real borrow conflict + move checker.
 - [ ] Integration of actual borrow semantics with current inference/checking.
 - [ ] Direct `Type::Ref` and borrow term forms wired into primary AST and checker.
 
@@ -24,7 +24,7 @@
 - [x] Keep API additions additive and avoid breaking existing callers.
 - [x] Keep deterministic error precedence.
 - [x] Keep tests as the source of truth; do not delete failing red suites to get green.
-- [ ] Convert scaffold probe-driven behavior to real semantics incrementally.
+- [x] Convert scaffold probe-driven behavior to real semantics incrementally.
 
 ## 3. Current Test Surface (Borrow)
 
@@ -38,7 +38,7 @@
 - `typechecker_borrow_negative_error_matrix_wbtest.mbt` (11 tests)
 - `typechecker_borrow_spec_matrix_wbtest.mbt` (5 tests)
 - `typechecker_borrow_edge_cases_wbtest.mbt` (16 tests)
-- `typechecker_borrow_feature_red_wbtest.mbt` (16 tests, green)
+- `typechecker_borrow_feature_red_wbtest.mbt` (20 tests, green)
 - `typechecker_borrow_feature_mountain_red_wbtest.mbt` (376 tests, green)
 
 ### 3.2 Red Mountain Composition
@@ -71,20 +71,21 @@
 ## 4. Major Workstreams (Execution Order)
 
 ## WS0: Remove Probe-Coupling Strategy
-- [ ] Stop using tag-string behavior as semantic truth.
+- [x] Stop using tag-string behavior as semantic truth.
 - [ ] Keep scaffold tests that validate API shape only.
 - [x] Transition feature tests from `feature_term("__feature_*")` to real term builders.
-- [ ] Ensure future error kinds come from semantics, not hardcoded tags.
+- [x] Ensure future error kinds come from semantics, not hardcoded tags.
 
 ### WS0 Definition of Done
-- [ ] `borrow_scaffold.mbt` no longer dispatches semantics by probe tag.
+- [x] `borrow_scaffold.mbt` no longer dispatches semantics by probe tag.
 - [x] `typechecker_borrow_feature_red_wbtest.mbt` and mountain tests use actual terms.
 
 ## WS1: Borrow IR Lowering
 - [ ] Define borrow IR schema stable enough for control-flow + place tracking.
 - [ ] Lower at least: `Var`, `Let`, `Lam`, `App`, `Record`, `Project`, `Tuple`, `TupleProject`, `Match`, `Fold`, `Unfold`, trait terms.
 - [ ] Preserve node ordering and scope-depth/region anchor metadata.
-- [ ] Validate lowering for ordinary terms returns `Ok(BorrowIr)`.
+- [x] Validate lowering for ordinary terms returns `Ok(BorrowIr)`.
+- [x] Decode borrow operations from ordinary intrinsic AST forms (`App`/`Var`) in addition to legacy constructor markers.
 
 ### WS1 DoD
 - [x] `RED: lower_to_borrow_ir should succeed for pure unit terms` green.
@@ -96,6 +97,7 @@
 - [ ] Emit constraints for borrow introduction, reborrow, assignment, and return flow.
 - [ ] Encode branch join requirements (`Match`, conditional forms) deterministically.
 - [ ] Include trait and polymorphic term flows.
+- [x] Accept region sentinel operations from ordinary AST terms (not only marker constructors).
 
 ### WS2 DoD
 - [x] `RED: collect_region_constraints_from_ir should accept empty IR` green.
@@ -115,20 +117,20 @@
 - [x] Red categories `err_outlives_owner`, `err_dangling_escape`, `err_region_unsatisfied` trend green.
 
 ## WS4: Place and Alias Analysis
-- [ ] Implement canonical place extraction.
-- [ ] Model overlaps: root vs field, tuple index, deref chains.
-- [ ] Determine compatibility checks for simultaneous loans.
-- [ ] Integrate with projection-heavy terms.
+- [x] Implement canonical place extraction.
+- [x] Model overlaps: root vs field, tuple index, deref chains.
+- [x] Determine compatibility checks for simultaneous loans.
+- [x] Integrate with projection-heavy terms.
 
 ### WS4 DoD
-- [ ] `err_borrow_conflict` categories green.
-- [ ] Edge-case tests about first-node dispatch replaced with semantic place-overlap tests.
+- [x] `err_borrow_conflict` categories green.
+- [x] Edge-case tests about first-node dispatch replaced with semantic place-overlap tests.
 
 ## WS5: Loan / Borrow Rules Engine
-- [ ] Implement shared/shared allowed.
-- [ ] Implement shared/mut and mut/mut conflict denial.
-- [ ] Implement mutation restrictions while borrowed.
-- [ ] Implement invalid-target detection for non-place borrow operations.
+- [x] Implement shared/shared allowed.
+- [x] Implement shared/mut and mut/mut conflict denial.
+- [x] Implement mutation restrictions while borrowed.
+- [x] Implement invalid-target detection for non-place borrow operations.
 
 ### WS5 DoD
 - [x] `err_borrow_conflict` green.
@@ -137,9 +139,9 @@
 - [x] `err_invalid_target` green.
 
 ## WS6: Move + Initialization Analysis
-- [ ] Track move state for variables and projections.
-- [ ] Detect use-after-move.
-- [ ] Detect borrowing moved values.
+- [x] Track move state for variables and projections.
+- [x] Detect use-after-move.
+- [x] Detect borrowing moved values.
 - [ ] Handle partial moves and reinitialization semantics.
 
 ### WS6 DoD
@@ -180,7 +182,7 @@
 
 ### WS9 DoD
 - [x] No feature behavior depends on `Con("__feature_*", ...)` or `Con("__err_*", ...)`.
-- [ ] Red/green status is driven by real term semantics.
+- [x] Red/green status is driven by real term semantics.
 
 ## WS10: Diagnostics and Developer UX
 - [ ] Attach actionable payload details to all borrow/lifetime errors.
@@ -199,7 +201,7 @@
 - [ ] Finalize error variants and payload shapes.
 
 ### `borrow_scaffold.mbt`
-- [ ] Replace placeholder/probe logic with real implementations.
+- [x] Replace placeholder/probe logic with real implementations.
 - [ ] Split into modules if needed: `borrow_ir.mbt`, `region_solver.mbt`, `borrow_checker.mbt`.
 
 ### `typechecker.mbt`
@@ -213,12 +215,12 @@
 - [ ] Regenerate with `moon info` after each API-affecting change.
 
 ## 6. Test-Driven Implementation Protocol
-- [ ] Keep red suites failing until their target workstream is implemented.
-- [ ] Work in vertical slices:
-  - [ ] Pick one category group.
-  - [ ] Implement minimum semantics.
-  - [ ] Turn only that category green.
-  - [ ] Refactor with tests green.
+- [x] Keep red suites failing until their target workstream is implemented.
+- [x] Work in vertical slices:
+  - [x] Pick one category group.
+  - [x] Implement minimum semantics.
+  - [x] Turn only that category green.
+  - [x] Refactor with tests green.
 - [ ] Do not mass-edit expectations to hide failures.
 - [ ] Prefer turning on categories by behavior, not by file order.
 
@@ -258,16 +260,22 @@
 
 ## 10. Handoff Notes For Next Agent
 - Treat current green scaffold suites as API-shape checks, not feature completion.
-- Mountain feature suites are currently green through explicit AST feature-term builders + constructor-marker classification in `borrow_scaffold.mbt`.
-- Prioritize replacing constructor-marker classification with real borrow semantics over lowered terms.
+- Mountain feature suites are currently green through explicit AST feature-term builders + operation-driven borrow semantics in `borrow_scaffold.mbt`.
+- Prioritize migrating operation-marked constructors to native borrow term forms over time.
 - Keep commits small and tied to one category/workstream at a time.
 
 ## 11. Actionable Tasks Discovered During Implementation
 - [x] Replace `__feature_*` category mapping with real AST term builders in `typechecker_borrow_feature_red_wbtest.mbt` and `typechecker_borrow_feature_mountain_red_wbtest.mbt`.
-- [ ] Replace placeholder region constraints from scenario tags with region obligations derived from lowered borrow IR operations.
-- [ ] Replace synthetic `feature_borrow_error` emissions with place-aware diagnostics derived from real place/alias analysis.
-- [ ] Populate `BorrowFacts.loans` and `BorrowFacts.moved_places` on successful analysis paths (currently returns empty facts).
+- [x] Replace placeholder region constraints from scenario tags with region obligations derived from lowered borrow IR operations.
+- [x] Replace synthetic `feature_borrow_error` emissions with place-aware diagnostics derived from real place/alias analysis.
+- [x] Populate `BorrowFacts.loans` and `BorrowFacts.moved_places` on successful analysis paths (currently returns empty facts).
 - [ ] Add mixed-scenario precedence tests where multiple feature constructors appear in one term tree.
 - [ ] Add assertions on error payload details (place names, offending constraints), not only error kind strings.
-- [ ] Remove constructor-marker coupling in `borrow_scaffold.mbt` by deriving feature outcomes from structural borrow IR/place events.
+- [x] Remove constructor-marker coupling in `borrow_scaffold.mbt` by deriving feature outcomes from structural borrow IR/place events.
 - [ ] Retire legacy `__err_*` probe-only scaffold tests once real borrow term forms are integrated into `Term`.
+- [ ] Generalize `BorrowOp...` parsing to decode arbitrary place paths instead of the current fixed `X/XField/Y` operation set.
+- [ ] Replace explicit `BorrowOpReleaseX` events with lexical scope-end loan release driven by IR structure.
+- [ ] Use solved region graph data (`RegionSolution`) inside borrow rule checks instead of ignoring it.
+- [ ] Add tuple-index and deref overlap regression tests to validate non-field projection compatibility logic.
+- [ ] Add typing-friendly borrow intrinsic forms (or native borrow term constructors) so infer/check wrappers can validate intrinsic borrow programs without unbound placeholders.
+- [ ] Extend intrinsic operation decoding to cover `use`/`move`/`assign` alias names consistently across unary and curried call shapes.

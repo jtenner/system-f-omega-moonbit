@@ -17,126 +17,306 @@ fn region_for_node(node_id : Int) -> Region {
 }
 
 ///|
-priv enum FeatureScenario {
-  SafeScenario
-  BorrowConflictScenario
-  UseAfterMoveScenario
-  MovedValueBorrowScenario
-  AssignToImmutableScenario
-  MutateWhileBorrowedScenario
-  OutlivesOwnerScenario
-  DanglingEscapeScenario
-  RegionUnsatisfiedScenario
-  InvalidTargetScenario
+priv enum BorrowOperation {
+  BorrowSharedOperation(Place)
+  BorrowMutOperation(Place)
+  MoveOperation(Place)
+  UseOperation(Place)
+  AssignMutableOperation(Place)
+  AssignImmutableOperation(Place)
+  ReleaseOperation(Place)
+  InvalidTargetOperation
+  RegionOutlivesOwnerOperation
+  RegionDanglingEscapeOperation
+  RegionUnsatisfiedOperation
 }
 
 ///|
-fn classify_feature_scenario(constructor_name : String) -> FeatureScenario? {
-  if constructor_name == "BorrowFeatureSafeSharedRead" {
-    return Some(SafeScenario)
-  }
-  if constructor_name == "BorrowFeatureSafeMutReborrow" {
-    return Some(SafeScenario)
-  }
-  if constructor_name == "BorrowFeatureSafeNllLastUse" {
-    return Some(SafeScenario)
-  }
-  if constructor_name == "BorrowFeatureSafeBranchJoin" {
-    return Some(SafeScenario)
-  }
-  if constructor_name == "BorrowFeatureSafeTraitPoly" {
-    return Some(SafeScenario)
-  }
-  if constructor_name == "BorrowFeatureSafeRecursiveProjection" {
-    return Some(SafeScenario)
-  }
-  if constructor_name == "BorrowFeatureSafeFallback" {
-    return Some(SafeScenario)
-  }
-  if constructor_name == "BorrowFeatureErrBorrowConflict" {
-    return Some(BorrowConflictScenario)
-  }
-  if constructor_name == "BorrowFeatureErrUseAfterMove" {
-    return Some(UseAfterMoveScenario)
-  }
-  if constructor_name == "BorrowFeatureErrPartialMoveProjection" {
-    return Some(UseAfterMoveScenario)
-  }
-  if constructor_name == "BorrowFeatureErrMovedValueBorrow" {
-    return Some(MovedValueBorrowScenario)
-  }
-  if constructor_name == "BorrowFeatureErrAssignToImmutable" {
-    return Some(AssignToImmutableScenario)
-  }
-  if constructor_name == "BorrowFeatureErrMutateWhileBorrowed" {
-    return Some(MutateWhileBorrowedScenario)
-  }
-  if constructor_name == "BorrowFeatureErrOutlivesOwner" {
-    return Some(OutlivesOwnerScenario)
-  }
-  if constructor_name == "BorrowFeatureErrDanglingEscape" {
-    return Some(DanglingEscapeScenario)
-  }
-  if constructor_name == "BorrowFeatureErrTraitEscape" {
-    return Some(DanglingEscapeScenario)
-  }
-  if constructor_name == "BorrowFeatureErrRegionUnsatisfied" {
-    return Some(RegionUnsatisfiedScenario)
-  }
-  if constructor_name == "BorrowFeatureErrInvalidTarget" {
-    return Some(InvalidTargetScenario)
-  }
-  None
-}
-
-///|
-fn classify_feature_scenario_from_ir(ir : BorrowIr) -> FeatureScenario? {
-  let mut saw_safe = false
-
-  for node in ir.nodes {
-    match node.term {
-      Con(name, _) =>
-        match classify_feature_scenario(name) {
-          Some(SafeScenario) => saw_safe = true
-          Some(scenario) => return Some(scenario)
-          None => ()
-        }
-      _ => ()
-    }
-  }
-
-  if saw_safe {
-    return Some(SafeScenario)
-  }
-  None
-}
-
-///|
-fn feature_region_constraint(scenario : FeatureScenario) -> RegionConstraint? {
-  match scenario {
-    OutlivesOwnerScenario =>
-      Some(RegionConstraint::placeholder("__err_borrow_outlives_owner"))
-    DanglingEscapeScenario =>
-      Some(RegionConstraint::placeholder("__err_dangling_reference_escape"))
-    RegionUnsatisfiedScenario =>
-      Some(RegionConstraint::placeholder("__err_region_constraint_unsatisfied"))
+fn parse_borrow_operation_from_constructor_name(
+  constructor_name : String,
+) -> BorrowOperation? {
+  match constructor_name {
+    "BorrowOpBorrowSharedX" => Some(BorrowSharedOperation(Place::root("x")))
+    "BorrowOpBorrowSharedXField" =>
+      Some(BorrowSharedOperation(Place::root("x").field("field")))
+    "BorrowOpBorrowSharedY" => Some(BorrowSharedOperation(Place::root("y")))
+    "BorrowOpBorrowMutX" => Some(BorrowMutOperation(Place::root("x")))
+    "BorrowOpBorrowMutXField" =>
+      Some(BorrowMutOperation(Place::root("x").field("field")))
+    "BorrowOpMoveX" => Some(MoveOperation(Place::root("x")))
+    "BorrowOpMoveXField" => Some(MoveOperation(Place::root("x").field("field")))
+    "BorrowOpUseX" => Some(UseOperation(Place::root("x")))
+    "BorrowOpUseXField" => Some(UseOperation(Place::root("x").field("field")))
+    "BorrowOpUseY" => Some(UseOperation(Place::root("y")))
+    "BorrowOpAssignMutableX" => Some(AssignMutableOperation(Place::root("x")))
+    "BorrowOpAssignImmutableX" =>
+      Some(AssignImmutableOperation(Place::root("x")))
+    "BorrowOpReleaseX" => Some(ReleaseOperation(Place::root("x")))
+    "BorrowOpInvalidTarget" => Some(InvalidTargetOperation)
+    "BorrowOpRegionOutlivesOwner" => Some(RegionOutlivesOwnerOperation)
+    "BorrowOpRegionDanglingEscape" => Some(RegionDanglingEscapeOperation)
+    "BorrowOpRegionUnsatisfied" => Some(RegionUnsatisfiedOperation)
     _ => None
   }
 }
 
 ///|
-fn feature_borrow_error(scenario : FeatureScenario) -> TypingError? {
-  let place_root = Place::root("feature_place")
+fn intrinsic_name_from_term(term : Term) -> String? {
+  match term {
+    Var(name) => Some(name)
+    Con(name, _) => Some(name)
+    _ => None
+  }
+}
 
-  match scenario {
-    BorrowConflictScenario =>
-      Some(BorrowConflict(place_root, place_root.field("borrowed_field")))
-    UseAfterMoveScenario => Some(UseAfterMove("feature_value"))
-    MovedValueBorrowScenario => Some(MovedValueBorrow("feature_value"))
-    AssignToImmutableScenario => Some(AssignToImmutable(place_root))
-    MutateWhileBorrowedScenario => Some(MutateWhileBorrowed(place_root))
-    InvalidTargetScenario =>
-      Some(InvalidBorrowTarget("feature term does not lower to a place"))
+///|
+fn place_from_term(term : Term) -> Place? {
+  match term {
+    Var(name) => Some(Place::root(name))
+    Con(name, _) => Some(Place::root(name))
+    Project(base, label) =>
+      match place_from_term(base) {
+        Some(place) => Some(place.field(label))
+        None => None
+      }
+    TupleProject(base, index) =>
+      match place_from_term(base) {
+        Some(place) => Some(place.tuple_index(index))
+        None => None
+      }
+    App(callee, arg) =>
+      match intrinsic_name_from_term(callee) {
+        Some("deref") =>
+          match place_from_term(arg) {
+            Some(place) => Some(place.deref_place())
+            None => None
+          }
+        Some("deref_place") =>
+          match place_from_term(arg) {
+            Some(place) => Some(place.deref_place())
+            None => None
+          }
+        _ => None
+      }
+    Fold(_, inner) => place_from_term(inner)
+    Unfold(inner) => place_from_term(inner)
+    _ => None
+  }
+}
+
+///|
+fn borrow_operation_from_intrinsic_name(name : String) -> BorrowOperation? {
+  match name {
+    "region_outlives_owner" => Some(RegionOutlivesOwnerOperation)
+    "region_dangling_escape" => Some(RegionDanglingEscapeOperation)
+    "region_unsatisfied" => Some(RegionUnsatisfiedOperation)
+    "invalid_borrow_target" => Some(InvalidTargetOperation)
+    _ => None
+  }
+}
+
+///|
+fn borrow_operation_from_intrinsic_unary_call(
+  name : String,
+  target : Term,
+) -> BorrowOperation? {
+  match name {
+    "borrow_shared" =>
+      match place_from_term(target) {
+        Some(place) => Some(BorrowSharedOperation(place))
+        None => Some(InvalidTargetOperation)
+      }
+    "borrow_mut" =>
+      match place_from_term(target) {
+        Some(place) => Some(BorrowMutOperation(place))
+        None => Some(InvalidTargetOperation)
+      }
+    "move_value" =>
+      match place_from_term(target) {
+        Some(place) => Some(MoveOperation(place))
+        None => Some(InvalidTargetOperation)
+      }
+    "move_term" =>
+      match place_from_term(target) {
+        Some(place) => Some(MoveOperation(place))
+        None => Some(InvalidTargetOperation)
+      }
+    "use_value" =>
+      match place_from_term(target) {
+        Some(place) => Some(UseOperation(place))
+        None => Some(InvalidTargetOperation)
+      }
+    "release" =>
+      match place_from_term(target) {
+        Some(place) => Some(ReleaseOperation(place))
+        None => Some(InvalidTargetOperation)
+      }
+    "assign_mutable" =>
+      match place_from_term(target) {
+        Some(place) => Some(AssignMutableOperation(place))
+        None => Some(InvalidTargetOperation)
+      }
+    "assign_immutable" =>
+      match place_from_term(target) {
+        Some(place) => Some(AssignImmutableOperation(place))
+        None => Some(InvalidTargetOperation)
+      }
+    "region_outlives_owner" => Some(RegionOutlivesOwnerOperation)
+    "region_dangling_escape" => Some(RegionDanglingEscapeOperation)
+    "region_unsatisfied" => Some(RegionUnsatisfiedOperation)
+    _ => None
+  }
+}
+
+///|
+fn borrow_operation_from_intrinsic_binary_call(
+  name : String,
+  target : Term,
+  value : Term,
+) -> BorrowOperation? {
+  ignore(value)
+  match name {
+    "assign_mutable" =>
+      match place_from_term(target) {
+        Some(place) => Some(AssignMutableOperation(place))
+        None => Some(InvalidTargetOperation)
+      }
+    "assign_immutable" =>
+      match place_from_term(target) {
+        Some(place) => Some(AssignImmutableOperation(place))
+        None => Some(InvalidTargetOperation)
+      }
+    _ => None
+  }
+}
+
+///|
+fn borrow_operation_from_term(term : Term) -> BorrowOperation? {
+  match term {
+    Con(name, _) =>
+      match parse_borrow_operation_from_constructor_name(name) {
+        Some(operation) => Some(operation)
+        None => borrow_operation_from_intrinsic_name(name)
+      }
+    Var(name) => borrow_operation_from_intrinsic_name(name)
+    App(App(callee, target), value) =>
+      match intrinsic_name_from_term(callee) {
+        Some(name) =>
+          borrow_operation_from_intrinsic_binary_call(name, target, value)
+        None => None
+      }
+    App(callee, target) =>
+      match intrinsic_name_from_term(callee) {
+        Some(name) => borrow_operation_from_intrinsic_unary_call(name, target)
+        None => None
+      }
+    _ => None
+  }
+}
+
+///|
+fn projections_prefix_match(
+  prefix : Array[PlaceProjection],
+  full : Array[PlaceProjection],
+) -> Bool {
+  if prefix.length() > full.length() {
+    return false
+  }
+  let mut index = 0
+  while index < prefix.length() {
+    if prefix[index] != full[index] {
+      return false
+    }
+    index = index + 1
+  }
+  true
+}
+
+///|
+fn places_overlap(left : Place, right : Place) -> Bool {
+  if left.root != right.root {
+    return false
+  }
+  projections_prefix_match(left.projections, right.projections) ||
+  projections_prefix_match(right.projections, left.projections)
+}
+
+///|
+fn place_key(place : Place) -> String {
+  let mut key = place.root
+  for projection in place.projections {
+    match projection {
+      Field(label) => key = key + "." + label
+      TupleIndex(index) => key = key + "." + index.to_string()
+      Deref => key = key + ".*"
+    }
+  }
+  key
+}
+
+///|
+fn find_conflicting_loan(
+  loans : Array[Loan],
+  place : Place,
+  mutability : Mutability,
+) -> Loan? {
+  for loan in loans {
+    if !places_overlap(loan.place, place) {
+      continue
+    }
+    if loan.mutability == Mutable || mutability == Mutable {
+      return Some(loan)
+    }
+  }
+  None
+}
+
+///|
+fn has_overlapping_loan(loans : Array[Loan], place : Place) -> Bool {
+  for loan in loans {
+    if places_overlap(loan.place, place) {
+      return true
+    }
+  }
+  false
+}
+
+///|
+fn has_overlapping_moved_place(
+  moved_places : Array[Place],
+  place : Place,
+) -> Bool {
+  for moved_place in moved_places {
+    if places_overlap(moved_place, place) {
+      return true
+    }
+  }
+  false
+}
+
+///|
+fn release_loans_for_place(loans : Array[Loan], place : Place) -> Unit {
+  let mut index = 0
+  while index < loans.length() {
+    if places_overlap(loans[index].place, place) {
+      ignore(loans.remove(index))
+    } else {
+      index = index + 1
+    }
+  }
+}
+
+///|
+fn region_constraint_for_operation(
+  operation : BorrowOperation,
+) -> RegionConstraint? {
+  match operation {
+    RegionOutlivesOwnerOperation =>
+      Some(RegionConstraint::placeholder("__err_borrow_outlives_owner"))
+    RegionDanglingEscapeOperation =>
+      Some(RegionConstraint::placeholder("__err_dangling_reference_escape"))
+    RegionUnsatisfiedOperation =>
+      Some(RegionConstraint::placeholder("__err_region_constraint_unsatisfied"))
     _ => None
   }
 }
@@ -557,6 +737,15 @@ pub fn collect_region_constraints_from_ir(
       )
     }
 
+    match borrow_operation_from_term(node.term) {
+      Some(operation) =>
+        match region_constraint_for_operation(operation) {
+          Some(constraint) => constraints.push(constraint)
+          None => ()
+        }
+      None => ()
+    }
+
     scope_stack.push(node.id)
   }
 
@@ -610,16 +799,88 @@ pub fn check_borrow_rules_placeholder(
     return Ok(BorrowFacts::empty())
   }
 
-  match classify_feature_scenario_from_ir(ir) {
-    Some(scenario) =>
-      match feature_borrow_error(scenario) {
-        Some(error) => return Err(error)
-        None => ()
+  let loans : Array[Loan] = []
+  let moved_places : Array[Place] = []
+  let moved_place_keys : Set[String] = Set::new()
+  let constraints : Array[RegionConstraint] = []
+  let mut next_loan_id = 0
+
+  for node in ir.nodes {
+    match borrow_operation_from_term(node.term) {
+      Some(BorrowSharedOperation(place)) => {
+        if has_overlapping_moved_place(moved_places, place) {
+          return Err(MovedValueBorrow(place_key(place)))
+        }
+        match find_conflicting_loan(loans, place, Shared) {
+          Some(conflicting_loan) =>
+            return Err(BorrowConflict(conflicting_loan.place, place))
+          None => {
+            loans.push(Loan::{
+              id: next_loan_id,
+              place,
+              mutability: Shared,
+              origin: place.root,
+              region: region_for_node(node.id),
+            })
+            next_loan_id = next_loan_id + 1
+          }
+        }
       }
-    None => ()
+      Some(BorrowMutOperation(place)) => {
+        if has_overlapping_moved_place(moved_places, place) {
+          return Err(MovedValueBorrow(place_key(place)))
+        }
+        match find_conflicting_loan(loans, place, Mutable) {
+          Some(conflicting_loan) =>
+            return Err(BorrowConflict(conflicting_loan.place, place))
+          None => {
+            loans.push(Loan::{
+              id: next_loan_id,
+              place,
+              mutability: Mutable,
+              origin: place.root,
+              region: region_for_node(node.id),
+            })
+            next_loan_id = next_loan_id + 1
+          }
+        }
+      }
+      Some(MoveOperation(place)) => {
+        moved_places.push(place)
+        moved_place_keys.add(place_key(place))
+      }
+      Some(UseOperation(place)) =>
+        if has_overlapping_moved_place(moved_places, place) {
+          return Err(UseAfterMove(place_key(place)))
+        }
+      Some(AssignMutableOperation(place)) =>
+        if has_overlapping_loan(loans, place) {
+          return Err(MutateWhileBorrowed(place))
+        }
+      Some(AssignImmutableOperation(place)) =>
+        return Err(AssignToImmutable(place))
+      Some(ReleaseOperation(place)) => release_loans_for_place(loans, place)
+      Some(InvalidTargetOperation) =>
+        return Err(
+          InvalidBorrowTarget("borrow operation target is not a place"),
+        )
+      Some(RegionOutlivesOwnerOperation) =>
+        constraints.push(
+          RegionConstraint::placeholder("__err_borrow_outlives_owner"),
+        )
+      Some(RegionDanglingEscapeOperation) =>
+        constraints.push(
+          RegionConstraint::placeholder("__err_dangling_reference_escape"),
+        )
+      Some(RegionUnsatisfiedOperation) =>
+        constraints.push(
+          RegionConstraint::placeholder("__err_region_constraint_unsatisfied"),
+        )
+      None => ()
+    }
   }
 
-  Ok(BorrowFacts::empty())
+  Ok(BorrowFacts::{ loans, moved_places: moved_place_keys, constraints })
 }
 
 ///|
@@ -639,15 +900,6 @@ pub fn TypeCheckerState::collect_region_constraints(
   let constraints = match collect_region_constraints_from_ir(ir) {
     Ok(constraints) => constraints
     Err(t) => return Err(t)
-  }
-
-  match classify_feature_scenario_from_ir(ir) {
-    Some(scenario) =>
-      match feature_region_constraint(scenario) {
-        Some(constraint) => constraints.push(constraint)
-        None => ()
-      }
-    None => ()
   }
 
   Ok(constraints)

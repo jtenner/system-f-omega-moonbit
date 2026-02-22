@@ -101,6 +101,31 @@ fn builder_sample_cases() -> Array[(String, String)] {
 }
 
 ///|
+fn borrow_ops_term(op_names : Array[String]) -> Term {
+  let ops : Array[Term] = []
+  for name in op_names {
+    ops.push(Term::con(name, Type::unit()))
+  }
+  ops.push(Term::unit())
+  Term::tuple_project(Term::tuple(ops), ops.length() - 1)
+}
+
+///|
+fn borrow_intrinsic_ops_term(ops : Array[Term]) -> Term {
+  let seq : Array[Term] = []
+  for op in ops {
+    seq.push(op)
+  }
+  seq.push(Term::unit())
+  Term::tuple_project(Term::tuple(seq), seq.length() - 1)
+}
+
+///|
+fn borrow_intrinsic_unary(name : String, target : Term) -> Term {
+  Term::app(Term::var_term(name), target)
+}
+
+///|
 test "RED: lower_to_borrow_ir should succeed for pure unit terms" {
   let result = lower_to_borrow_ir(Term::unit())
   assert_true(result is Ok(_))
@@ -268,8 +293,132 @@ test "RED: feature term builders should avoid legacy __feature constructor tags"
     let names = collect_constructor_names(borrow_feature_term(tag))
     for name in names {
       assert_false(name.contains("__feature_"))
+      assert_false(name.contains("BorrowFeature"))
     }
   }
+}
+
+///|
+test "RED: legacy BorrowFeature markers should be treated as ordinary constructors" {
+  let state = TypeCheckerState::fresh()
+  let result = state.analyze_borrows(
+    Term::con("BorrowFeatureErrUseAfterMove", Type::unit()),
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(typing_error_kind_from_analysis_result(result) == "Ok")
+}
+
+///|
+test "RED: semantic borrow ops should report root-vs-field borrow conflicts" {
+  let state = TypeCheckerState::fresh()
+  let term = borrow_ops_term([
+    "BorrowOpBorrowMutX", "BorrowOpBorrowSharedXField",
+  ])
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(
+    typing_error_kind_from_analysis_result(result) == "BorrowConflict",
+  )
+}
+
+///|
+test "RED: semantic borrow ops should report use-after-move for partial projections" {
+  let state = TypeCheckerState::fresh()
+  let term = borrow_ops_term(["BorrowOpMoveXField", "BorrowOpUseX"])
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(typing_error_kind_from_analysis_result(result) == "UseAfterMove")
+}
+
+///|
+test "RED: semantic region ops should report dangling escape errors" {
+  let state = TypeCheckerState::fresh()
+  let term = borrow_ops_term(["BorrowOpRegionDanglingEscape"])
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(
+    typing_error_kind_from_analysis_result(result) == "DanglingReferenceEscape",
+  )
+}
+
+///|
+test "RED: intrinsic AST borrow ops should report root-vs-field conflicts" {
+  let state = TypeCheckerState::fresh()
+  let term = borrow_intrinsic_ops_term([
+    borrow_intrinsic_unary("borrow_mut", Term::var_term("x")),
+    borrow_intrinsic_unary(
+      "borrow_shared",
+      Term::project(Term::var_term("x"), "field"),
+    ),
+  ])
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(
+    typing_error_kind_from_analysis_result(result) == "BorrowConflict",
+  )
+}
+
+///|
+test "RED: intrinsic AST move/use ops should report projection overlap use-after-move" {
+  let state = TypeCheckerState::fresh()
+  let term = borrow_intrinsic_ops_term([
+    borrow_intrinsic_unary(
+      "move_value",
+      Term::tuple_project(Term::var_term("x"), 0),
+    ),
+    borrow_intrinsic_unary("use_value", Term::var_term("x")),
+  ])
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(typing_error_kind_from_analysis_result(result) == "UseAfterMove")
+}
+
+///|
+test "RED: intrinsic AST borrow ops should reject non-place targets" {
+  let state = TypeCheckerState::fresh()
+  let term = borrow_intrinsic_ops_term([
+    borrow_intrinsic_unary("borrow_shared", Term::unit()),
+  ])
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(
+    typing_error_kind_from_analysis_result(result) == "InvalidBorrowTarget",
+  )
+}
+
+///|
+test "RED: intrinsic AST region ops should report dangling escape" {
+  let state = TypeCheckerState::fresh()
+  let term = borrow_intrinsic_ops_term([
+    Term::var_term("region_dangling_escape"),
+  ])
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(
+    typing_error_kind_from_analysis_result(result) == "DanglingReferenceEscape",
+  )
 }
 
 ///|

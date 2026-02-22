@@ -58,28 +58,42 @@ fn borrow_probe_term(tag : String) -> Term {
 }
 
 ///|
-fn borrow_feature_marker(marker : String) -> Term {
-  Term::con(marker, Type::unit())
+fn borrow_feature_op(name : String) -> Term {
+  Term::con(name, Type::unit())
 }
 
 ///|
-fn borrow_feature_program_let(marker : String) -> Term {
-  Term::let_term("feature_marker", borrow_feature_marker(marker), Term::unit())
+fn borrow_feature_ops_block(op_names : Array[String]) -> Term {
+  let ops : Array[Term] = []
+  for name in op_names {
+    ops.push(borrow_feature_op(name))
+  }
+  ops.push(Term::unit())
+  Term::tuple_project(Term::tuple(ops), ops.length() - 1)
 }
 
 ///|
-fn borrow_feature_program_tuple(marker : String) -> Term {
+fn borrow_feature_program_let(op_names : Array[String]) -> Term {
+  Term::let_term(
+    "feature_ops",
+    borrow_feature_ops_block(op_names),
+    Term::unit(),
+  )
+}
+
+///|
+fn borrow_feature_program_tuple(op_names : Array[String]) -> Term {
   Term::tuple_project(
-    Term::tuple([borrow_feature_marker(marker), Term::unit()]),
+    Term::tuple([borrow_feature_ops_block(op_names), Term::unit()]),
     1,
   )
 }
 
 ///|
-fn borrow_feature_program_record(marker : String) -> Term {
+fn borrow_feature_program_record(op_names : Array[String]) -> Term {
   Term::project(
     Term::record([
-      ("feature_marker", borrow_feature_marker(marker)),
+      ("feature_ops", borrow_feature_ops_block(op_names)),
       ("v", Term::unit()),
     ]),
     "v",
@@ -87,14 +101,14 @@ fn borrow_feature_program_record(marker : String) -> Term {
 }
 
 ///|
-fn borrow_feature_program_lambda(marker : String) -> Term {
+fn borrow_feature_program_lambda(op_names : Array[String]) -> Term {
   Term::app(
     Term::lam(
       "x",
       Type::unit(),
       Term::let_term(
-        "feature_marker",
-        borrow_feature_marker(marker),
+        "feature_ops",
+        borrow_feature_ops_block(op_names),
         Term::var_term("x"),
       ),
     ),
@@ -103,121 +117,130 @@ fn borrow_feature_program_lambda(marker : String) -> Term {
 }
 
 ///|
-fn borrow_feature_program_for_tag(tag : String, marker : String) -> Term {
+fn borrow_feature_ops_for_tag(tag : String) -> Array[String] {
   if tag.contains("safe_shared_read_") {
-    return borrow_feature_program_tuple(marker)
+    return [
+      "BorrowOpBorrowSharedX", "BorrowOpBorrowSharedXField", "BorrowOpUseXField",
+    ]
   }
   if tag.contains("safe_mut_reborrow_") {
-    return borrow_feature_program_lambda(marker)
+    return ["BorrowOpBorrowMutX", "BorrowOpReleaseX", "BorrowOpBorrowMutX"]
   }
   if tag.contains("safe_nll_last_use_") {
-    return borrow_feature_program_let(marker)
+    return [
+      "BorrowOpBorrowSharedX", "BorrowOpReleaseX", "BorrowOpAssignMutableX",
+    ]
   }
   if tag.contains("safe_branch_join_") {
-    return borrow_feature_program_record(marker)
+    return [
+      "BorrowOpBorrowSharedXField", "BorrowOpReleaseX", "BorrowOpBorrowSharedX",
+    ]
   }
   if tag.contains("safe_trait_poly_") {
-    return borrow_feature_program_record(marker)
+    return ["BorrowOpBorrowSharedY", "BorrowOpUseY"]
   }
   if tag.contains("safe_recursive_projection_") {
-    return borrow_feature_program_tuple(marker)
+    return ["BorrowOpBorrowSharedXField", "BorrowOpUseXField"]
   }
   if tag.contains("err_borrow_conflict_") {
-    return borrow_feature_program_let(marker)
+    return ["BorrowOpBorrowMutX", "BorrowOpBorrowSharedXField"]
   }
   if tag.contains("err_use_after_move_") {
-    return borrow_feature_program_tuple(marker)
+    return ["BorrowOpMoveX", "BorrowOpUseX"]
   }
   if tag.contains("err_moved_value_borrow_") {
-    return borrow_feature_program_record(marker)
+    return ["BorrowOpMoveX", "BorrowOpBorrowSharedX"]
   }
   if tag.contains("err_assign_to_immutable_") {
-    return borrow_feature_program_let(marker)
+    return ["BorrowOpAssignImmutableX"]
   }
   if tag.contains("err_mutate_while_borrowed_") {
-    return borrow_feature_program_lambda(marker)
+    return ["BorrowOpBorrowSharedX", "BorrowOpAssignMutableX"]
   }
   if tag.contains("err_outlives_owner_") {
-    return borrow_feature_program_record(marker)
+    return ["BorrowOpRegionOutlivesOwner"]
   }
   if tag.contains("err_dangling_escape_") {
-    return borrow_feature_program_record(marker)
+    return ["BorrowOpRegionDanglingEscape"]
   }
   if tag.contains("err_region_unsatisfied_") {
-    return borrow_feature_program_tuple(marker)
+    return ["BorrowOpRegionUnsatisfied"]
   }
   if tag.contains("err_invalid_target_") {
-    return borrow_feature_program_let(marker)
+    return ["BorrowOpInvalidTarget"]
   }
   if tag.contains("err_trait_escape_") {
-    return borrow_feature_program_lambda(marker)
+    return ["BorrowOpRegionDanglingEscape"]
   }
   if tag.contains("err_partial_move_projection_") {
-    return borrow_feature_program_tuple(marker)
+    return ["BorrowOpMoveXField", "BorrowOpUseX"]
   }
-  borrow_feature_program_let(marker)
+  ["BorrowOpBorrowSharedX", "BorrowOpReleaseX", "BorrowOpUseX"]
 }
 
 ///|
-fn borrow_feature_marker_for_tag(tag : String) -> String {
+fn borrow_feature_program_for_tag(
+  tag : String,
+  op_names : Array[String],
+) -> Term {
   if tag.contains("safe_shared_read_") {
-    return "BorrowFeatureSafeSharedRead"
+    return borrow_feature_program_tuple(op_names)
   }
   if tag.contains("safe_mut_reborrow_") {
-    return "BorrowFeatureSafeMutReborrow"
+    return borrow_feature_program_lambda(op_names)
   }
   if tag.contains("safe_nll_last_use_") {
-    return "BorrowFeatureSafeNllLastUse"
+    return borrow_feature_program_let(op_names)
   }
   if tag.contains("safe_branch_join_") {
-    return "BorrowFeatureSafeBranchJoin"
+    return borrow_feature_program_record(op_names)
   }
   if tag.contains("safe_trait_poly_") {
-    return "BorrowFeatureSafeTraitPoly"
+    return borrow_feature_program_record(op_names)
   }
   if tag.contains("safe_recursive_projection_") {
-    return "BorrowFeatureSafeRecursiveProjection"
+    return borrow_feature_program_tuple(op_names)
   }
   if tag.contains("err_borrow_conflict_") {
-    return "BorrowFeatureErrBorrowConflict"
+    return borrow_feature_program_let(op_names)
   }
   if tag.contains("err_use_after_move_") {
-    return "BorrowFeatureErrUseAfterMove"
+    return borrow_feature_program_tuple(op_names)
   }
   if tag.contains("err_moved_value_borrow_") {
-    return "BorrowFeatureErrMovedValueBorrow"
+    return borrow_feature_program_record(op_names)
   }
   if tag.contains("err_assign_to_immutable_") {
-    return "BorrowFeatureErrAssignToImmutable"
+    return borrow_feature_program_let(op_names)
   }
   if tag.contains("err_mutate_while_borrowed_") {
-    return "BorrowFeatureErrMutateWhileBorrowed"
+    return borrow_feature_program_lambda(op_names)
   }
   if tag.contains("err_outlives_owner_") {
-    return "BorrowFeatureErrOutlivesOwner"
+    return borrow_feature_program_record(op_names)
   }
   if tag.contains("err_dangling_escape_") {
-    return "BorrowFeatureErrDanglingEscape"
+    return borrow_feature_program_record(op_names)
   }
   if tag.contains("err_region_unsatisfied_") {
-    return "BorrowFeatureErrRegionUnsatisfied"
+    return borrow_feature_program_tuple(op_names)
   }
   if tag.contains("err_invalid_target_") {
-    return "BorrowFeatureErrInvalidTarget"
+    return borrow_feature_program_let(op_names)
   }
   if tag.contains("err_trait_escape_") {
-    return "BorrowFeatureErrTraitEscape"
+    return borrow_feature_program_lambda(op_names)
   }
   if tag.contains("err_partial_move_projection_") {
-    return "BorrowFeatureErrPartialMoveProjection"
+    return borrow_feature_program_tuple(op_names)
   }
-  "BorrowFeatureSafeFallback"
+  borrow_feature_program_let(op_names)
 }
 
 ///|
 fn borrow_feature_term(tag : String) -> Term {
-  let marker = borrow_feature_marker_for_tag(tag)
-  borrow_feature_program_for_tag(tag, marker)
+  let op_names = borrow_feature_ops_for_tag(tag)
+  borrow_feature_program_for_tag(tag, op_names)
 }
 
 ///|
