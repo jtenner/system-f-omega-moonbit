@@ -2,7 +2,7 @@
 
 ## 1. Snapshot (2026-02-22)
 - Goal state is still in-progress: scaffold remains, but feature categories now run through explicit AST builder terms and structured borrow/region pipeline hooks.
-- Current baseline from `moon test`: `Total tests: 646, passed: 646, failed: 0`.
+- Current baseline from `moon test`: `Total tests: 650, passed: 650, failed: 0`.
 - Former mountain red phase is still green; full semantic borrow/lifetime analysis remains pending.
 
 ### 1.1 What Already Exists
@@ -37,8 +37,8 @@
 - `typechecker_borrow_error_paths_wbtest.mbt` (2 tests)
 - `typechecker_borrow_negative_error_matrix_wbtest.mbt` (11 tests)
 - `typechecker_borrow_spec_matrix_wbtest.mbt` (5 tests)
-- `typechecker_borrow_edge_cases_wbtest.mbt` (19 tests)
-- `typechecker_borrow_feature_red_wbtest.mbt` (26 tests, green)
+- `typechecker_borrow_edge_cases_wbtest.mbt` (20 tests)
+- `typechecker_borrow_feature_red_wbtest.mbt` (29 tests, green)
 - `typechecker_borrow_feature_mountain_red_wbtest.mbt` (376 tests, green)
 
 ### 3.2 Red Mountain Composition
@@ -274,11 +274,13 @@
 - [x] Add assertions on error payload details (place names, offending constraints), not only error kind strings.
 - [x] Remove constructor-marker coupling in `borrow_scaffold.mbt` by deriving feature outcomes from structural borrow IR/place events.
 - [ ] Retire legacy `__err_*` probe-only scaffold tests once real borrow term forms are integrated into `Term`.
-- [ ] Generalize `BorrowOp...` parsing to decode arbitrary place paths instead of the current fixed `X/XField/Y` operation set.
-- [ ] Replace explicit `BorrowOpReleaseX` events with lexical scope-end loan release driven by IR structure.
+- [x] Generalize `BorrowOp...` parsing to decode arbitrary place paths instead of the current fixed `X/XField/Y` operation set.
+- [x] Replace explicit `BorrowOpReleaseX` events with lexical scope-end loan release driven by IR structure.
 - [x] Use solved region graph data (`RegionSolution`) inside borrow rule checks instead of ignoring it.
 - [x] Add tuple-index and deref overlap regression tests to validate non-field projection compatibility logic.
 - [ ] Add typing-friendly borrow intrinsic forms (or native borrow term constructors) so infer/check wrappers can validate intrinsic borrow programs without unbound placeholders.
 - [x] Extend intrinsic operation decoding to cover `use`/`move`/`assign` alias names consistently across unary and curried call shapes.
 - [x] Strengthen region-solution integration beyond unresolved checks by enforcing concrete outlives relationships during loan operations.
-- [ ] Decide whether curried unary intrinsic forms should be accepted long-term or rejected as invalid arity once native borrow terms are added.
+- [x] Decide whether curried unary intrinsic forms should be accepted long-term or rejected as invalid arity once native borrow terms are added.
+- [ ] Document and stabilize the generalized `BorrowOp...` constructor grammar (`__` segments + `field:`/`tuple:`/`deref`) for future test authors.
+- [ ] Replace remaining fixed `BorrowOp...X` references in support builders with generalized path forms for consistency.

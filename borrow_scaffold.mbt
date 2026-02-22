@@ -56,6 +56,115 @@ fn parse_borrow_operation_from_constructor_name(
     "BorrowOpRegionOutlivesOwner" => Some(RegionOutlivesOwnerOperation)
     "BorrowOpRegionDanglingEscape" => Some(RegionDanglingEscapeOperation)
     "BorrowOpRegionUnsatisfied" => Some(RegionUnsatisfiedOperation)
+    _ =>
+      parse_generalized_borrow_operation_from_constructor_name(constructor_name)
+  }
+}
+
+///|
+fn parse_tuple_index_token(token : String) -> Int? {
+  if token.is_empty() {
+    return None
+  }
+
+  let mut value = 0
+  for c in token {
+    let code = c.to_int()
+    if code < '0'.to_int() || code > '9'.to_int() {
+      return None
+    }
+    value = value * 10 + (code - '0'.to_int())
+  }
+  Some(value)
+}
+
+///|
+fn parse_borrow_place_tokens(tokens : Array[String]) -> Place? {
+  if tokens.length() == 0 {
+    return None
+  }
+
+  let root = tokens[0]
+  if root.is_empty() {
+    return None
+  }
+
+  let mut place = Place::root(root)
+  let mut index = 1
+  while index < tokens.length() {
+    let token = tokens[index]
+    if token == "deref" {
+      place = place.deref_place()
+      index = index + 1
+      continue
+    }
+
+    match token.strip_prefix("field:") {
+      Some(label) => {
+        let label = label.to_string()
+        if label.is_empty() {
+          return None
+        }
+        place = place.field(label)
+        index = index + 1
+        continue
+      }
+      None => ()
+    }
+
+    match token.strip_prefix("tuple:") {
+      Some(tuple_index_token) =>
+        match parse_tuple_index_token(tuple_index_token.to_string()) {
+          Some(tuple_index) => {
+            place = place.tuple_index(tuple_index)
+            index = index + 1
+            continue
+          }
+          None => return None
+        }
+      None => ()
+    }
+
+    return None
+  }
+
+  Some(place)
+}
+
+///|
+fn parse_generalized_borrow_operation_from_constructor_name(
+  constructor_name : String,
+) -> BorrowOperation? {
+  let parts : Array[String] = constructor_name
+    .split("__")
+    .map(StringView::to_string)
+    .collect()
+
+  if parts.length() < 2 {
+    return None
+  }
+
+  let op_name = parts[0]
+  let place_tokens : Array[String] = []
+  let mut index = 1
+  while index < parts.length() {
+    place_tokens.push(parts[index])
+    index = index + 1
+  }
+
+  let place = match parse_borrow_place_tokens(place_tokens) {
+    Some(place) => place
+    None => return None
+  }
+
+  match op_name {
+    "BorrowOpBorrowShared" => Some(BorrowSharedOperation(place))
+    "BorrowOpBorrowMut" => Some(BorrowMutOperation(place))
+    "BorrowOpMove" => Some(MoveOperation(place))
+    "BorrowOpUse" => Some(UseOperation(place))
+    "BorrowOpAssignMutable" => Some(AssignMutableOperation(place))
+    "BorrowOpAssignImmutable" => Some(AssignImmutableOperation(place))
+    "BorrowOpRelease" => Some(ReleaseOperation(place))
     _ => None
   }
 }
@@ -204,15 +313,35 @@ fn borrow_operation_from_intrinsic_unary_call(
 }
 
 ///|
+fn intrinsic_name_requires_single_argument(name : String) -> Bool {
+  match name {
+    "borrow_shared" => true
+    "borrow_ref" => true
+    "borrow_shared_ref" => true
+    "borrow_mut" => true
+    "move_value" => true
+    "move_term" => true
+    "move" => true
+    "use_value" => true
+    "use" => true
+    "release" => true
+    "release_borrow" => true
+    "region_outlives_owner" => true
+    "region_dangling_escape" => true
+    "region_unsatisfied" => true
+    _ => false
+  }
+}
+
+///|
 fn borrow_operation_from_intrinsic_binary_call(
   name : String,
   target : Term,
   value : Term,
 ) -> BorrowOperation? {
   ignore(value)
-  match borrow_operation_from_intrinsic_unary_call(name, target) {
-    Some(operation) => return Some(operation)
-    None => ()
+  if intrinsic_name_requires_single_argument(name) {
+    return Some(InvalidTargetOperation)
   }
 
   match name {
@@ -350,10 +479,38 @@ fn has_overlapping_moved_place(
 }
 
 ///|
-fn release_loans_for_place(loans : Array[Loan], place : Place) -> Unit {
+fn release_loans_for_place(
+  loans : Array[Loan],
+  loan_scope_depths : Map[LoanId, Int],
+  place : Place,
+) -> Unit {
   let mut index = 0
   while index < loans.length() {
     if places_overlap(loans[index].place, place) {
+      loan_scope_depths.remove(loans[index].id)
+      ignore(loans.remove(index))
+    } else {
+      index = index + 1
+    }
+  }
+}
+
+///|
+fn release_loans_outside_lexical_scope(
+  loans : Array[Loan],
+  loan_scope_depths : Map[LoanId, Int],
+  scope_depth : Int,
+) -> Unit {
+  let mut index = 0
+  while index < loans.length() {
+    let loan = loans[index]
+    let loan_scope_depth = match loan_scope_depths.get(loan.id) {
+      Some(depth) => depth
+      None => scope_depth
+    }
+
+    if loan_scope_depth > scope_depth {
+      loan_scope_depths.remove(loan.id)
       ignore(loans.remove(index))
     } else {
       index = index + 1
@@ -884,12 +1041,19 @@ pub fn check_borrow_rules_placeholder(
   }
 
   let loans : Array[Loan] = []
+  let loan_scope_depths : Map[LoanId, Int] = Map::new()
   let moved_places : Array[Place] = []
   let moved_place_keys : Set[String] = Set::new()
   let constraints : Array[RegionConstraint] = []
   let mut next_loan_id = 0
 
   for node in ir.nodes {
+    let mut scope_depth = node.scope_depth
+    if scope_depth < 0 {
+      scope_depth = 0
+    }
+    release_loans_outside_lexical_scope(loans, loan_scope_depths, scope_depth)
+
     match borrow_operation_from_term(node.term) {
       Some(BorrowSharedOperation(place)) => {
         if !solution_has_outlives_edge(
@@ -914,6 +1078,7 @@ pub fn check_borrow_rules_placeholder(
               origin: place.root,
               region: region_for_node(node.id),
             })
+            loan_scope_depths.set(next_loan_id, scope_depth)
             next_loan_id = next_loan_id + 1
           }
         }
@@ -941,6 +1106,7 @@ pub fn check_borrow_rules_placeholder(
               origin: place.root,
               region: region_for_node(node.id),
             })
+            loan_scope_depths.set(next_loan_id, scope_depth)
             next_loan_id = next_loan_id + 1
           }
         }
@@ -959,7 +1125,8 @@ pub fn check_borrow_rules_placeholder(
         }
       Some(AssignImmutableOperation(place)) =>
         return Err(AssignToImmutable(place))
-      Some(ReleaseOperation(place)) => release_loans_for_place(loans, place)
+      Some(ReleaseOperation(place)) =>
+        release_loans_for_place(loans, loan_scope_depths, place)
       Some(InvalidTargetOperation) =>
         return Err(
           InvalidBorrowTarget("borrow operation target is not a place"),

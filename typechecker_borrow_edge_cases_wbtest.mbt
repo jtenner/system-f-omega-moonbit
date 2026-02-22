@@ -227,6 +227,39 @@ test "RED: check_borrow_rules_placeholder enforces owner outlives edges from sol
 }
 
 ///|
+test "RED: check_borrow_rules_placeholder should release loans at lexical scope exit without explicit release ops" {
+  let ir = BorrowIr::{
+    nodes: [
+      BorrowIrNode::{
+        id: 0,
+        term: Term::con("BorrowOpBorrowMutX", Type::unit()),
+        scope_depth: 1,
+      },
+      BorrowIrNode::{
+        id: 1,
+        term: Term::con("BorrowOpBorrowSharedX", Type::unit()),
+        scope_depth: 0,
+      },
+    ],
+  }
+
+  let owner_outlives : Set[Region] = Set::new()
+  owner_outlives.add(Region::infer(0))
+  owner_outlives.add(Region::infer(1))
+  let solved = RegionSolution::{
+    outlives: Map::from_array([(Region::named("owner::x"), owner_outlives)]),
+    unresolved: [],
+  }
+
+  let result = check_borrow_rules_placeholder(
+    ir,
+    solved,
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(result is Ok(_))
+}
+
+///|
 test "collect_region_constraints_from_ir handles unrecognized-first-node IR" {
   let ir = ir_with_two_nodes(
     Term::unit(),

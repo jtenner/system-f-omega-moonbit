@@ -357,6 +357,36 @@ test "RED: semantic region ops should report dangling escape errors" {
 }
 
 ///|
+test "RED: generalized BorrowOp paths should parse field+deref projections for conflict checks" {
+  let state = TypeCheckerState::fresh()
+  let term = borrow_ops_term([
+    "BorrowOpBorrowMut__z__field:left__deref", "BorrowOpBorrowShared__z",
+  ])
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(
+    typing_error_kind_from_analysis_result(result) == "BorrowConflict",
+  )
+}
+
+///|
+test "RED: generalized BorrowOp paths should parse tuple projections for move/use checks" {
+  let state = TypeCheckerState::fresh()
+  let term = borrow_ops_term([
+    "BorrowOpMove__q__field:a__tuple:1", "BorrowOpUse__q",
+  ])
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(typing_error_kind_from_analysis_result(result) == "UseAfterMove")
+}
+
+///|
 test "RED: intrinsic AST borrow ops should report root-vs-field conflicts" {
   let state = TypeCheckerState::fresh()
   let term = borrow_intrinsic_ops_term([
@@ -446,6 +476,22 @@ test "RED: intrinsic curried borrow form should reject non-place targets" {
   let state = TypeCheckerState::fresh()
   let term = borrow_intrinsic_ops_term([
     borrow_intrinsic_binary("borrow_shared", Term::unit(), Term::unit()),
+  ])
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(
+    typing_error_kind_from_analysis_result(result) == "InvalidBorrowTarget",
+  )
+}
+
+///|
+test "RED: intrinsic curried unary forms should be rejected even with valid first argument places" {
+  let state = TypeCheckerState::fresh()
+  let term = borrow_intrinsic_ops_term([
+    borrow_intrinsic_binary("borrow_shared", Term::var_term("x"), Term::unit()),
   ])
   let result = state.analyze_borrows(
     term,
