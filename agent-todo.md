@@ -1,7 +1,7 @@
 # Agent TODO: Remaining Backlog
 
 ## Verified State (2026-02-23)
-- Library tests are green: `/home/jtenner/.moon/bin/moon test --package jtenner/sfo` -> `Total tests: 727, passed: 727, failed: 0`.
+- Library tests are green: `/home/jtenner/.moon/bin/moon test --package jtenner/sfo` -> `Total tests: 731, passed: 731, failed: 0`.
 - Completed items were removed during cleanup. This file tracks only unfinished work.
 
 ## Priority P0: README Beginner Guide and Full-Library Examples
@@ -35,11 +35,13 @@
 - [x] Require `/home/jtenner/.moon/bin/moon test --package jtenner/sfo` after README edits and record the result in backlog updates.
 
 ## Priority P1: Borrow Soundness and Policy Consolidation
-- [ ] Split `check_type` into explicit core/policy layers so fallback infer paths can reuse native-policy analysis state instead of re-scanning terms in mixed infer/check flows.
-- [ ] Extend region constraint generation for trait dictionary flow and polymorphic boundaries.
-- [ ] Add explicit tests for region safety across trait abstraction and polymorphic generalization boundaries.
-- [ ] Remove legacy `collect_known_region_probe_errors` sentinel special-casing once direct placeholder compatibility tests are migrated to structural region-op programs.
+- [x] Split `check_type` into explicit core/policy layers so fallback infer paths can reuse native-policy analysis state instead of re-scanning terms in mixed infer/check flows.
+- [x] Extend region constraint generation for trait dictionary flow and polymorphic boundaries.
+- [x] Add explicit tests for region safety across trait abstraction and polymorphic generalization boundaries.
+- [x] Remove legacy `collect_known_region_probe_errors` sentinel special-casing once direct placeholder compatibility tests are migrated to structural region-op programs.
 - [ ] Add focused coverage for generalized `BorrowOpRegionUnsatisfied` region token forms beyond `named:<...>` (`infer:<id>`, `static`) and verify payload shape.
+- [ ] Replace shape-based fallback detection in `check_type_with_native_policy_flag` with execution-path signaling from `check_type` core to guarantee exact no-rescan behavior as check rules evolve.
+- [ ] Add targeted nested mixed infer/check tests to ensure native policy executes exactly once for fallback-rooted terms and still runs for explicit-check roots with nested borrows.
 
 ## Priority P2: Probe Removal and Test Migration
 - [ ] Migrate remaining probe-based error tests to real borrow AST programs while preserving semantic coverage.

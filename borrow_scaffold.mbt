@@ -878,6 +878,42 @@ fn region_constraint_for_operation(
 }
 
 ///|
+fn is_trait_dictionary_or_polymorphic_boundary_term(term : Term) -> Bool {
+  match term {
+    Dict(_, _, _) => true
+    TraitLam(_, _, _, _, _, _) => true
+    TraitApp(_, _, _) => true
+    TraitMethod(_, _) => true
+    TyLam(_, _, _) => true
+    _ => false
+  }
+}
+
+///|
+fn add_owner_outlives_boundary_constraints(
+  constraints : Array[RegionConstraint],
+  place : Place,
+  scope_stack_ids : Array[Int],
+  scope_stack_terms : Array[Term],
+) -> Unit {
+  let owner_region = owner_region_for_place(place)
+  loop 0 {
+    i if i < scope_stack_ids.length() => {
+      if is_trait_dictionary_or_polymorphic_boundary_term(scope_stack_terms[i]) {
+        constraints.push(
+          RegionConstraint::outlives(
+            owner_region,
+            region_for_node(scope_stack_ids[i]),
+          ),
+        )
+      }
+      continue i + 1
+    }
+    _ => ()
+  }
+}
+
+///|
 fn lower_term_into_ir(
   term : Term,
   scope_depth : Int,
@@ -990,48 +1026,6 @@ fn add_outlives_edge(
 
   tos.add(right)
   true
-}
-
-///|
-fn collect_known_region_probe_errors(
-  constraints : Array[RegionConstraint],
-) -> Result[Unit, TypingError] {
-  let mut saw_outlives_owner = false
-  let mut saw_dangling_escape = false
-  let mut saw_unsatisfied = false
-
-  for constraint in constraints {
-    match constraint {
-      Placeholder("__err_borrow_outlives_owner") => saw_outlives_owner = true
-      Placeholder("__err_dangling_reference_escape") =>
-        saw_dangling_escape = true
-      Placeholder("__err_region_constraint_unsatisfied") =>
-        saw_unsatisfied = true
-      _ => ()
-    }
-  }
-
-  if saw_outlives_owner {
-    return Err(
-      BorrowOutlivesOwner("region placeholder: __err_borrow_outlives_owner"),
-    )
-  }
-  if saw_dangling_escape {
-    return Err(
-      DanglingReferenceEscape(
-        "region placeholder: __err_dangling_reference_escape",
-      ),
-    )
-  }
-  if saw_unsatisfied {
-    return Err(
-      RegionConstraintUnsatisfied(
-        RegionConstraint::placeholder("__err_region_constraint_unsatisfied"),
-      ),
-    )
-  }
-
-  Ok(())
 }
 
 ///|
@@ -1319,23 +1313,25 @@ pub fn collect_region_constraints_from_ir(
   ir : BorrowIr,
 ) -> Result[Array[RegionConstraint], TypingError] {
   let constraints : Array[RegionConstraint] = []
-  let scope_stack : Array[Int] = []
+  let scope_stack_ids : Array[Int] = []
+  let scope_stack_terms : Array[Term] = []
 
   for node in ir.nodes {
     let mut depth = node.scope_depth
     if depth < 0 {
       depth = 0
     }
-    if depth > scope_stack.length() {
-      depth = scope_stack.length()
+    if depth > scope_stack_ids.length() {
+      depth = scope_stack_ids.length()
     }
 
-    while scope_stack.length() > depth {
-      ignore(scope_stack.pop())
+    while scope_stack_ids.length() > depth {
+      ignore(scope_stack_ids.pop())
+      ignore(scope_stack_terms.pop())
     }
 
-    if depth > 0 && scope_stack.length() > 0 {
-      let parent_id = scope_stack[scope_stack.length() - 1]
+    if depth > 0 && scope_stack_ids.length() > 0 {
+      let parent_id = scope_stack_ids[scope_stack_ids.length() - 1]
       constraints.push(
         RegionConstraint::outlives(
           region_for_node(parent_id),
@@ -1353,7 +1349,20 @@ pub fn collect_region_constraints_from_ir(
       None => ()
     }
 
-    scope_stack.push(node.id)
+    match borrow_operation_from_term(node.term) {
+      Some(BorrowSharedOperation(place)) =>
+        add_owner_outlives_boundary_constraints(
+          constraints, place, scope_stack_ids, scope_stack_terms,
+        )
+      Some(BorrowMutOperation(place)) =>
+        add_owner_outlives_boundary_constraints(
+          constraints, place, scope_stack_ids, scope_stack_terms,
+        )
+      _ => ()
+    }
+
+    scope_stack_ids.push(node.id)
+    scope_stack_terms.push(node.term)
   }
 
   Ok(constraints)
@@ -1365,11 +1374,6 @@ pub fn collect_region_constraints_from_ir(
 pub fn solve_region_constraints_placeholder(
   constraints : Array[RegionConstraint],
 ) -> Result[RegionSolution, TypingError] {
-  match collect_known_region_probe_errors(constraints) {
-    Ok(_) => ()
-    Err(error) => return Err(error)
-  }
-
   let outlives : Map[Region, Set[Region]] = Map::new()
   let unresolved : Array[RegionConstraint] = []
 

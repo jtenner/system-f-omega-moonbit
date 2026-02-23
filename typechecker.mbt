@@ -3868,16 +3868,51 @@ fn infer_type_with_native_policy_flag(
 }
 
 ///|
+fn check_type_path_uses_infer_fallback(
+  term : Term,
+  expected_type : Type,
+) -> Bool {
+  match (term, expected_type) {
+    (BorrowShared(_), Ref(_, Shared, _)) => false
+    (BorrowShared(_), _) => true
+    (BorrowMut(_), Ref(_, Mutable, _)) => false
+    (BorrowMut(_), _) => true
+    (Deref(_), _) => false
+    (Assign(_, _), Tuple(expected_elements)) => expected_elements.length() != 0
+    (Assign(_, _), _) => true
+    (Move(_), _) => false
+    (Lam(_, _, _), Arrow(_, _)) => false
+    (Lam(_, _, _), _) => true
+    (TyLam(_, _, _), Forall(_, _, _)) => false
+    (TyLam(_, _, _), _) => true
+    (TraitLam(_, _, _, _, _, _), BoundedForall(_, _, _, _)) => false
+    (TraitLam(_, _, _, _, _, _), _) => true
+    (Record(_), Record(_)) => false
+    (Record(_), _) => true
+    (Tuple(_), Tuple(_)) => false
+    (Tuple(_), _) => true
+    (Inject(_, _, _), _) => false
+    (Fold(_, _), _) => false
+    _ => true
+  }
+}
+
+///|
 fn check_type_with_native_policy_flag(
   state : TypeCheckerState,
   term : Term,
   expected_type : Type,
 ) -> Result[(CheckedType, Bool), TypingError] {
+  let normalized_expected = state.normalize_type(expected_type)
   let checked = match state.check_type(term, expected_type) {
     Ok(checked) => checked
     Err(t) => return Err(t)
   }
-  Ok((checked, term_contains_native_borrow_syntax(term)))
+  let native_policy_already_applied_by_fallback = term_contains_native_borrow_syntax(
+      term,
+    ) &&
+    check_type_path_uses_infer_fallback(term, normalized_expected)
+  Ok((checked, native_policy_already_applied_by_fallback))
 }
 
 ///|

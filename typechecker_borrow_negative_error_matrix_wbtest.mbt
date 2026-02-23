@@ -56,21 +56,16 @@ test "collect_region_constraints_from_ir accepts empty and lowered probe IR" {
 }
 
 ///|
-test "solve_region_constraints handles placeholders and structural constraints" {
+test "solve_region_constraints handles generic placeholders and structural constraints" {
   let outlives = solve_region_constraints_placeholder([
     RegionConstraint::placeholder("__err_borrow_outlives_owner"),
   ])
-  assert_true(
-    typing_error_kind_from_solution_result(outlives) == "BorrowOutlivesOwner",
-  )
+  assert_true(outlives is Err(RegionConstraintUnsatisfied(_)))
 
   let dangling = solve_region_constraints_placeholder([
     RegionConstraint::placeholder("__err_dangling_reference_escape"),
   ])
-  assert_true(
-    typing_error_kind_from_solution_result(dangling) ==
-    "DanglingReferenceEscape",
-  )
+  assert_true(dangling is Err(RegionConstraintUnsatisfied(_)))
 
   let unsatisfied = solve_region_constraints_placeholder([
     RegionConstraint::placeholder("__err_region_constraint_unsatisfied"),
@@ -157,35 +152,23 @@ test "collect_region_constraints API accepts pure and probe terms" {
 }
 
 ///|
-test "solve_region_constraints API maps known placeholder constraints to expected error kinds" {
+test "solve_region_constraints API keeps known placeholder constraints generic" {
   let state = TypeCheckerState::fresh()
 
-  assert_true(
-    typing_error_kind_from_solution_result(
-      state.solve_region_constraints([
-        RegionConstraint::placeholder("__err_borrow_outlives_owner"),
-      ]),
-    ) ==
-    "BorrowOutlivesOwner",
-  )
+  let outlives = state.solve_region_constraints([
+    RegionConstraint::placeholder("__err_borrow_outlives_owner"),
+  ])
+  assert_true(outlives is Err(RegionConstraintUnsatisfied(_)))
 
-  assert_true(
-    typing_error_kind_from_solution_result(
-      state.solve_region_constraints([
-        RegionConstraint::placeholder("__err_dangling_reference_escape"),
-      ]),
-    ) ==
-    "DanglingReferenceEscape",
-  )
+  let dangling = state.solve_region_constraints([
+    RegionConstraint::placeholder("__err_dangling_reference_escape"),
+  ])
+  assert_true(dangling is Err(RegionConstraintUnsatisfied(_)))
 
-  assert_true(
-    typing_error_kind_from_solution_result(
-      state.solve_region_constraints([
-        RegionConstraint::placeholder("__err_region_constraint_unsatisfied"),
-      ]),
-    ) ==
-    "RegionConstraintUnsatisfied",
-  )
+  let unsatisfied = state.solve_region_constraints([
+    RegionConstraint::placeholder("__err_region_constraint_unsatisfied"),
+  ])
+  assert_true(unsatisfied is Err(RegionConstraintUnsatisfied(_)))
 }
 
 ///|

@@ -109,6 +109,38 @@ test "check_type_with_borrow_analysis matches check_type for native borrow confl
 }
 
 ///|
+test "check_type_with_borrow_analysis enforces native borrow policy for explicit expected tuples" {
+  let state = TypeCheckerState::fresh().extend_context([
+    Binding::term("x", Type::unit()),
+  ])
+  let term = Term::tuple([
+    Term::borrow_mut(Term::var_term("x")),
+    Term::borrow_shared(Term::var_term("x")),
+    Term::unit(),
+  ])
+  let expected = Type::tuple([
+    Type::ref_type(
+      Region::named("borrow::x"),
+      Mutability::mutable(),
+      Type::unit(),
+    ),
+    Type::ref_type(
+      Region::named("borrow::x"),
+      Mutability::shared(),
+      Type::unit(),
+    ),
+    Type::unit(),
+  ])
+
+  let result = state.check_type_with_borrow_analysis(
+    term,
+    expected,
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(typing_error_kind_from_checked_result(result) == "BorrowConflict")
+}
+
+///|
 test "infer native-policy helper returns native flag false for non-borrow terms" {
   let state = TypeCheckerState::fresh()
   let result = infer_type_with_native_policy_flag(state, Term::unit())
@@ -151,7 +183,7 @@ test "check native-policy helper returns native flag false for non-borrow terms"
 }
 
 ///|
-test "check native-policy helper returns native flag true for native borrow terms" {
+test "check native-policy helper returns native flag false when core check has not applied policy yet" {
   let state = TypeCheckerState::fresh().extend_context([
     Binding::term("x", Type::con("Int")),
   ])
@@ -167,7 +199,24 @@ test "check native-policy helper returns native flag true for native borrow term
   )
   assert_true(result is Ok(_))
   match result {
-    Ok((checked, true)) => assert_true(checked.ty == expected)
+    Ok((checked, false)) => assert_true(checked.ty == expected)
+    _ => panic()
+  }
+}
+
+///|
+test "check native-policy helper returns native flag true when fallback inference already applied policy" {
+  let state = TypeCheckerState::fresh().extend_context([
+    Binding::term("x", Type::con("Int")),
+  ])
+  let term = Term::tuple_project(
+    Term::tuple([Term::borrow_shared(Term::var_term("x")), Term::unit()]),
+    1,
+  )
+  let result = check_type_with_native_policy_flag(state, term, Type::unit())
+  assert_true(result is Ok(_))
+  match result {
+    Ok((checked, true)) => assert_true(checked.ty == Type::unit())
     _ => panic()
   }
 }

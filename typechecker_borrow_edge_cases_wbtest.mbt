@@ -204,6 +204,102 @@ test "RED: collect_region_constraints_from_ir emits owner outlives edges for bor
 }
 
 ///|
+test "RED: collect_region_constraints_from_ir adds trait dictionary boundary owner edges" {
+  let ir = BorrowIr::{
+    nodes: [
+      BorrowIrNode::{
+        id: 0,
+        term: Term::dict("Eq", Type::unit(), []),
+        scope_depth: 0,
+      },
+      BorrowIrNode::{
+        id: 1,
+        term: Term::con("BorrowOpBorrowShared__x", Type::unit()),
+        scope_depth: 1,
+      },
+    ],
+  }
+  let result = collect_region_constraints_from_ir(ir)
+  assert_true(result is Ok(_))
+  match result {
+    Ok(constraints) =>
+      assert_true(
+        constraints.contains(
+          RegionConstraint::outlives(
+            Region::named("owner::x"),
+            Region::infer(0),
+          ),
+        ),
+      )
+    _ => panic()
+  }
+}
+
+///|
+test "RED: collect_region_constraints_from_ir adds trait abstraction boundary owner edges" {
+  let ir = BorrowIr::{
+    nodes: [
+      BorrowIrNode::{
+        id: 0,
+        term: TraitLam("dict", "Eq", "A", Star, [], Term::unit()),
+        scope_depth: 0,
+      },
+      BorrowIrNode::{
+        id: 1,
+        term: Term::con("BorrowOpBorrowMut__x", Type::unit()),
+        scope_depth: 1,
+      },
+    ],
+  }
+  let result = collect_region_constraints_from_ir(ir)
+  assert_true(result is Ok(_))
+  match result {
+    Ok(constraints) =>
+      assert_true(
+        constraints.contains(
+          RegionConstraint::outlives(
+            Region::named("owner::x"),
+            Region::infer(0),
+          ),
+        ),
+      )
+    _ => panic()
+  }
+}
+
+///|
+test "RED: collect_region_constraints_from_ir adds polymorphic boundary owner edges" {
+  let ir = BorrowIr::{
+    nodes: [
+      BorrowIrNode::{
+        id: 0,
+        term: TyLam("A", Star, Term::unit()),
+        scope_depth: 0,
+      },
+      BorrowIrNode::{
+        id: 1,
+        term: Term::con("BorrowOpBorrowShared__x", Type::unit()),
+        scope_depth: 1,
+      },
+    ],
+  }
+  let result = collect_region_constraints_from_ir(ir)
+  assert_true(result is Ok(_))
+  match result {
+    Ok(constraints) =>
+      assert_true(
+        constraints.contains(
+          RegionConstraint::outlives(
+            Region::named("owner::x"),
+            Region::infer(0),
+          ),
+        ),
+      )
+    _ => panic()
+  }
+}
+
+///|
 test "check_borrow_rules_placeholder accepts arbitrary IR nodes" {
   let result = check_borrow_rules_placeholder(
     ir_with_two_nodes(
@@ -311,26 +407,21 @@ test "check_borrow_rules_placeholder handles unrecognized-first-node IR" {
 }
 
 ///|
-test "solve_region_constraints placeholder precedence prefers outlives first" {
+test "solve_region_constraints treats legacy sentinel placeholders as generic unsatisfied constraints" {
   let result = solve_region_constraints_placeholder([
     RegionConstraint::placeholder("__err_region_constraint_unsatisfied"),
     RegionConstraint::placeholder("__err_dangling_reference_escape"),
     RegionConstraint::placeholder("__err_borrow_outlives_owner"),
   ])
-  assert_true(
-    typing_error_kind_from_solution_result(result) == "BorrowOutlivesOwner",
-  )
-}
-
-///|
-test "solve_region_constraints placeholder precedence then prefers dangling" {
-  let result = solve_region_constraints_placeholder([
-    RegionConstraint::placeholder("__err_region_constraint_unsatisfied"),
-    RegionConstraint::placeholder("__err_dangling_reference_escape"),
-  ])
-  assert_true(
-    typing_error_kind_from_solution_result(result) == "DanglingReferenceEscape",
-  )
+  assert_true(result is Err(RegionConstraintUnsatisfied(_)))
+  match result {
+    Err(RegionConstraintUnsatisfied(constraint)) =>
+      assert_true(
+        constraint ==
+        RegionConstraint::placeholder("__err_region_constraint_unsatisfied"),
+      )
+    _ => panic()
+  }
 }
 
 ///|
@@ -553,24 +644,33 @@ test "RED: outlives-owner payload includes projected place path" {
 }
 
 ///|
-test "RED: region placeholder payloads preserve actionable sentinel context" {
-  let outlives_owner = solve_region_constraints_placeholder([
-    RegionConstraint::placeholder("__err_borrow_outlives_owner"),
+test "RED: structural region ops preserve actionable outlives and dangling payloads" {
+  let state = TypeCheckerState::fresh()
+  let outlives_owner_term = borrow_intrinsic_ops_term([
+    Term::con("BorrowOpRegionOutlivesOwner__x", Type::unit()),
   ])
-  assert_true(outlives_owner is Err(BorrowOutlivesOwner(_)))
-  match outlives_owner {
-    Err(BorrowOutlivesOwner(message)) =>
-      assert_true(message.contains("__err_borrow_outlives_owner"))
+  let outlives_owner_result = state.analyze_borrows(
+    outlives_owner_term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(outlives_owner_result is Err(BorrowOutlivesOwner(_)))
+  match outlives_owner_result {
+    Err(BorrowOutlivesOwner(message)) => assert_true(message == "x")
     _ => panic()
   }
 
-  let dangling_escape = solve_region_constraints_placeholder([
-    RegionConstraint::placeholder("__err_dangling_reference_escape"),
+  let dangling_escape_term = borrow_intrinsic_ops_term([
+    Term::con("BorrowOpRegionDanglingEscape__x", Type::unit()),
   ])
-  assert_true(dangling_escape is Err(DanglingReferenceEscape(_)))
-  match dangling_escape {
-    Err(DanglingReferenceEscape(message)) =>
-      assert_true(message.contains("__err_dangling_reference_escape"))
+  let dangling_escape_result = state.analyze_borrows(
+    dangling_escape_term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(dangling_escape_result is Err(DanglingReferenceEscape(_)))
+  match dangling_escape_result {
+    Err(DanglingReferenceEscape(message)) => assert_true(message == "x")
     _ => panic()
   }
 }
