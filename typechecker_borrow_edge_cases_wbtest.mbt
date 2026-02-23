@@ -39,6 +39,33 @@ test "lower_to_borrow_ir lowers lambda terms structurally" {
 }
 
 ///|
+test "RED: lower_to_borrow_ir should emit explicit match-branch boundary markers" {
+  let term = Term::match_term(Term::var_term("scrutinee"), [
+    (Pattern::wildcard(), Term::unit()),
+    (Pattern::wildcard(), Term::unit()),
+  ])
+  let result = lower_to_borrow_ir(term)
+  assert_true(result is Ok(_))
+  match result {
+    Ok(ir) => {
+      let mut saw_boundary = false
+      for node in ir.nodes {
+        match node.term {
+          Con(name, Tuple(elements)) =>
+            if name == borrow_ir_match_branch_boundary_marker_name() &&
+              elements.length() == 0 {
+              saw_boundary = true
+            }
+          _ => ()
+        }
+      }
+      assert_true(saw_boundary)
+    }
+    _ => panic()
+  }
+}
+
+///|
 test "collect_region_constraints treats synthetic probes as ordinary terms" {
   let state = TypeCheckerState::fresh()
   let result = state.collect_region_constraints(
@@ -155,7 +182,7 @@ test "RED: collect_region_constraints_from_ir emits owner outlives edges for bor
     nodes: [
       BorrowIrNode::{
         id: 0,
-        term: Term::con("BorrowOpBorrowSharedX", Type::unit()),
+        term: Term::con("BorrowOpBorrowShared__x", Type::unit()),
         scope_depth: 0,
       },
     ],
@@ -195,7 +222,7 @@ test "RED: check_borrow_rules_placeholder enforces owner outlives edges from sol
     nodes: [
       BorrowIrNode::{
         id: 0,
-        term: Term::con("BorrowOpBorrowSharedX", Type::unit()),
+        term: Term::con("BorrowOpBorrowShared__x", Type::unit()),
         scope_depth: 0,
       },
     ],
@@ -232,12 +259,12 @@ test "RED: check_borrow_rules_placeholder should release loans at lexical scope 
     nodes: [
       BorrowIrNode::{
         id: 0,
-        term: Term::con("BorrowOpBorrowMutX", Type::unit()),
+        term: Term::con("BorrowOpBorrowMut__x", Type::unit()),
         scope_depth: 1,
       },
       BorrowIrNode::{
         id: 1,
-        term: Term::con("BorrowOpBorrowSharedX", Type::unit()),
+        term: Term::con("BorrowOpBorrowShared__x", Type::unit()),
         scope_depth: 0,
       },
     ],
@@ -427,6 +454,57 @@ test "RED: analyze_borrows clears moved-place state after assignment reinitializ
     BorrowCheckerOptions::default(),
   )
   assert_true(typing_error_kind_from_analysis_result(result) == "Ok")
+}
+
+///|
+test "RED: analyze_borrows uses branch-join moved-place meet semantics" {
+  let state = TypeCheckerState::fresh()
+  let term = borrow_intrinsic_ops_term([
+    Term::match_term(Term::var_term("scrutinee"), [
+      (
+        Pattern::wildcard(),
+        borrow_intrinsic_unary("move_value", Term::var_term("x")),
+      ),
+      (Pattern::wildcard(), Term::unit()),
+    ]),
+    borrow_intrinsic_unary("use_value", Term::var_term("x")),
+  ])
+
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(typing_error_kind_from_analysis_result(result) == "Ok")
+}
+
+///|
+test "RED: generalized region unsatisfied ops emit structural unsatisfied constraints" {
+  let state = TypeCheckerState::fresh()
+  let term = borrow_intrinsic_ops_term([
+    Term::con(
+      "BorrowOpRegionUnsatisfied__named:alpha__named:omega",
+      Type::unit(),
+    ),
+  ])
+
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(result is Err(RegionConstraintUnsatisfied(_)))
+  match result {
+    Err(RegionConstraintUnsatisfied(constraint)) =>
+      assert_true(
+        constraint ==
+        RegionConstraint::outlives(
+          Region::named("alpha"),
+          Region::named("omega"),
+        ),
+      )
+    _ => panic()
+  }
 }
 
 ///|

@@ -312,6 +312,23 @@ test "RED: feature term builders should avoid legacy __feature constructor tags"
 }
 
 ///|
+test "RED: feature term builders should use generalized path-based BorrowOp names" {
+  for c in builder_sample_cases() {
+    let (tag, _) = c
+    let names = collect_constructor_names(borrow_feature_term(tag))
+    for name in names {
+      if name.contains("BorrowOpBorrow") ||
+        name.contains("BorrowOpMove") ||
+        name.contains("BorrowOpUse") ||
+        name.contains("BorrowOpAssign") ||
+        name.contains("BorrowOpRelease") {
+        assert_true(name.contains("__"))
+      }
+    }
+  }
+}
+
+///|
 test "RED: legacy BorrowFeature markers should be treated as ordinary constructors" {
   let state = TypeCheckerState::fresh()
   let result = state.analyze_borrows(
@@ -326,7 +343,7 @@ test "RED: legacy BorrowFeature markers should be treated as ordinary constructo
 test "RED: semantic borrow ops should report root-vs-field borrow conflicts" {
   let state = TypeCheckerState::fresh()
   let term = borrow_ops_term([
-    "BorrowOpBorrowMutX", "BorrowOpBorrowSharedXField",
+    "BorrowOpBorrowMut__x", "BorrowOpBorrowShared__x__field:field",
   ])
   let result = state.analyze_borrows(
     term,
@@ -341,7 +358,7 @@ test "RED: semantic borrow ops should report root-vs-field borrow conflicts" {
 ///|
 test "RED: semantic borrow ops should report use-after-move for partial projections" {
   let state = TypeCheckerState::fresh()
-  let term = borrow_ops_term(["BorrowOpMoveXField", "BorrowOpUseX"])
+  let term = borrow_ops_term(["BorrowOpMove__x__field:field", "BorrowOpUse__x"])
   let result = state.analyze_borrows(
     term,
     Type::unit(),
@@ -351,9 +368,23 @@ test "RED: semantic borrow ops should report use-after-move for partial projecti
 }
 
 ///|
+test "RED: fixed BorrowOp X/Y constructor tags should be treated as ordinary constructors" {
+  let state = TypeCheckerState::fresh()
+  let term = borrow_ops_term([
+    "BorrowOpBorrowMutX", "BorrowOpBorrowSharedXField",
+  ])
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(typing_error_kind_from_analysis_result(result) == "Ok")
+}
+
+///|
 test "RED: semantic region ops should report dangling escape errors" {
   let state = TypeCheckerState::fresh()
-  let term = borrow_ops_term(["BorrowOpRegionDanglingEscape"])
+  let term = borrow_ops_term(["BorrowOpRegionDanglingEscape__x"])
   let result = state.analyze_borrows(
     term,
     Type::unit(),
@@ -362,6 +393,21 @@ test "RED: semantic region ops should report dangling escape errors" {
   assert_true(
     typing_error_kind_from_analysis_result(result) == "DanglingReferenceEscape",
   )
+}
+
+///|
+test "RED: fixed region/invalid constructor probe tags should be ordinary constructors" {
+  let state = TypeCheckerState::fresh()
+  let term = borrow_ops_term([
+    "BorrowOpRegionOutlivesOwner", "BorrowOpRegionDanglingEscape", "BorrowOpRegionUnsatisfied",
+    "BorrowOpInvalidTarget",
+  ])
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(typing_error_kind_from_analysis_result(result) == "Ok")
 }
 
 ///|
@@ -594,7 +640,10 @@ test "RED: mixed scenarios should prefer solver-stage region errors before borro
     Err(RegionConstraintUnsatisfied(constraint)) =>
       assert_true(
         constraint ==
-        RegionConstraint::placeholder("__err_region_constraint_unsatisfied"),
+        RegionConstraint::outlives(
+          Region::named("region_probe::left"),
+          Region::named("region_probe::right"),
+        ),
       )
     _ => panic()
   }

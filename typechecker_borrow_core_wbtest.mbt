@@ -63,3 +63,38 @@ test "borrow core scaffold exposes empty defaults" {
   assert_eq(result.facts.loans.length(), 0)
   assert_eq(result.solved.unresolved.length(), 0)
 }
+
+///|
+test "borrow core scaffold exposes native borrow syntax detector" {
+  assert_false(term_contains_native_borrow_syntax(Term::unit()))
+  assert_false(
+    term_contains_native_borrow_syntax(
+      Term::let_term("x", Term::unit(), Term::var_term("x")),
+    ),
+  )
+  assert_true(
+    term_contains_native_borrow_syntax(
+      Term::let_term(
+        "x",
+        Term::unit(),
+        Term::tuple_project(
+          Term::tuple([
+            Term::borrow_mut(Term::var_term("x")),
+            Term::borrow_shared(Term::var_term("x")),
+            Term::unit(),
+          ]),
+          2,
+        ),
+      ),
+    ),
+  )
+}
+
+///|
+test "borrow core scaffold exposes stable borrow IR schema markers" {
+  assert_eq(borrow_ir_schema_version(), 1)
+  assert_true(
+    borrow_ir_match_branch_boundary_marker_name() ==
+    "BorrowIrBoundaryMatchBranch",
+  )
+}

@@ -2433,22 +2433,64 @@ pub fn TypeCheckerState::check_type(
 
   // Native borrow term checking.
   match (term, expected_type) {
-    (BorrowShared(target), Ref(_, Shared, expected_inner)) =>
-      match self.check_type(target, expected_inner) {
-        Ok(result) => {
-          let subst = result.subst
-          return Ok({ ty: self.apply_substitution(subst, expected_type), subst })
-        }
+    (BorrowShared(target), Ref(_, Shared, expected_inner)) => {
+      let target_place = match native_place_from_term_for_typing(target) {
+        Some(place) => place
+        None =>
+          return Err(
+            InvalidBorrowTarget(
+              "borrow_shared target is not a valid place expression",
+            ),
+          )
+      }
+
+      let result = match self.check_type(target, expected_inner) {
+        Ok(result) => result
         Err(t) => return Err(t)
       }
-    (BorrowMut(target), Ref(_, Mutable, expected_inner)) =>
-      match self.check_type(target, expected_inner) {
-        Ok(result) => {
-          let subst = result.subst
-          return Ok({ ty: self.apply_substitution(subst, expected_type), subst })
-        }
+
+      let subst = result.subst
+      let resolved_inner = self.apply_substitution(subst, expected_inner)
+      let expected_ref_ty = self.apply_substitution(subst, expected_type)
+      let actual_ref_ty = Type::ref_type(
+        region_for_native_borrow_place(target_place),
+        Mutability::shared(),
+        resolved_inner,
+      )
+      if !self.types_equal(actual_ref_ty, expected_ref_ty) {
+        return Err(TypeMismatch(expected_ref_ty, actual_ref_ty))
+      }
+      return Ok({ ty: expected_ref_ty, subst })
+    }
+    (BorrowMut(target), Ref(_, Mutable, expected_inner)) => {
+      let target_place = match native_place_from_term_for_typing(target) {
+        Some(place) => place
+        None =>
+          return Err(
+            InvalidBorrowTarget(
+              "borrow_mut target is not a valid place expression",
+            ),
+          )
+      }
+
+      let result = match self.check_type(target, expected_inner) {
+        Ok(result) => result
         Err(t) => return Err(t)
       }
+
+      let subst = result.subst
+      let resolved_inner = self.apply_substitution(subst, expected_inner)
+      let expected_ref_ty = self.apply_substitution(subst, expected_type)
+      let actual_ref_ty = Type::ref_type(
+        region_for_native_borrow_place(target_place),
+        Mutability::mutable(),
+        resolved_inner,
+      )
+      if !self.types_equal(actual_ref_ty, expected_ref_ty) {
+        return Err(TypeMismatch(expected_ref_ty, actual_ref_ty))
+      }
+      return Ok({ ty: expected_ref_ty, subst })
+    }
     (Deref(inner), _) => {
       let inferred = match infer_deref_type(self, inner) {
         Ok(ty) => ty
@@ -3560,37 +3602,25 @@ fn infer_unfold_type(
 
 ///|
 fn native_place_from_term_for_typing(term : Term) -> Place? {
-  match term {
-    Var(name) => Some(Place::root(name))
-    Con(name, _) => Some(Place::root(name))
-    Project(base, label) =>
-      match native_place_from_term_for_typing(base) {
-        Some(place) => Some(place.field(label))
-        None => None
-      }
-    TupleProject(base, index) =>
-      match native_place_from_term_for_typing(base) {
-        Some(place) => Some(place.tuple_index(index))
-        None => None
-      }
-    Deref(inner) =>
-      match native_place_from_term_for_typing(inner) {
-        Some(place) => Some(place.deref_place())
-        None => None
-      }
-    App(callee, arg) =>
-      match callee {
-        Var("deref") | Var("deref_place") =>
-          match native_place_from_term_for_typing(arg) {
-            Some(place) => Some(place.deref_place())
-            None => None
-          }
-        _ => None
-      }
-    Fold(_, inner) => native_place_from_term_for_typing(inner)
-    Unfold(inner) => native_place_from_term_for_typing(inner)
-    _ => None
+  borrow_place_from_term(term)
+}
+
+///|
+fn native_place_key_for_typing(place : Place) -> String {
+  let mut key = place.root
+  for projection in place.projections {
+    match projection {
+      Field(label) => key = key + "." + label
+      TupleIndex(index) => key = key + "." + index.to_string()
+      Deref => key = key + ".*"
+    }
   }
+  key
+}
+
+///|
+fn region_for_native_borrow_place(place : Place) -> Region {
+  Region::named("borrow::" + native_place_key_for_typing(place))
 }
 
 ///|
@@ -3612,10 +3642,12 @@ fn infer_borrow_type(
     Ok(ty) => ty
     Err(t) => return Err(t)
   }
-  if native_place_from_term_for_typing(target) is None {
-    return Err(
-      InvalidBorrowTarget(op_name + " target is not a valid place expression"),
-    )
+  let target_place = match native_place_from_term_for_typing(target) {
+    Some(place) => place
+    None =>
+      return Err(
+        InvalidBorrowTarget(op_name + " target is not a valid place expression"),
+      )
   }
 
   let target_kind = match state.check_kind(target_ty, true) {
@@ -3626,7 +3658,13 @@ fn infer_borrow_type(
     return Err(KindMismatch(Star, target_kind))
   }
 
-  Ok(Type::ref_type(Region::static_region(), mutability, target_ty))
+  Ok(
+    Type::ref_type(
+      region_for_native_borrow_place(target_place),
+      mutability,
+      target_ty,
+    ),
+  )
 }
 
 ///|
@@ -3724,46 +3762,134 @@ fn infer_tuple_project_type(
 }
 
 ///|
+fn term_contains_native_borrow_syntax(term : Term) -> Bool {
+  match term {
+    Var(_) => false
+    Con(_, _) => false
+    BorrowShared(_) => true
+    BorrowMut(_) => true
+    Deref(_) => true
+    Assign(_, _) => true
+    Move(_) => true
+    Lam(_, _, body) => term_contains_native_borrow_syntax(body)
+    App(callee, arg) =>
+      term_contains_native_borrow_syntax(callee) ||
+      term_contains_native_borrow_syntax(arg)
+    Let(_, value, body) =>
+      term_contains_native_borrow_syntax(value) ||
+      term_contains_native_borrow_syntax(body)
+    TyLam(_, _, body) => term_contains_native_borrow_syntax(body)
+    TyApp(value, _) => term_contains_native_borrow_syntax(value)
+    Dict(_, _, methods) =>
+      methods.any(entry => term_contains_native_borrow_syntax(entry.1))
+    TraitLam(_, _, _, _, _, body) => term_contains_native_borrow_syntax(body)
+    TraitApp(value, _, dicts) =>
+      term_contains_native_borrow_syntax(value) ||
+      dicts.any(dict => term_contains_native_borrow_syntax(dict))
+    TraitMethod(dict_term, _) => term_contains_native_borrow_syntax(dict_term)
+    Record(fields) =>
+      fields.any(entry => term_contains_native_borrow_syntax(entry.1))
+    Project(record_term, _) => term_contains_native_borrow_syntax(record_term)
+    Inject(_, value_term, _) => term_contains_native_borrow_syntax(value_term)
+    Match(scrutinee, cases) =>
+      term_contains_native_borrow_syntax(scrutinee) ||
+      cases.any(entry => term_contains_native_borrow_syntax(entry.1))
+    Fold(_, inner) => term_contains_native_borrow_syntax(inner)
+    Unfold(inner) => term_contains_native_borrow_syntax(inner)
+    Tuple(elements) =>
+      elements.any(element => term_contains_native_borrow_syntax(element))
+    TupleProject(tuple_term, _) =>
+      term_contains_native_borrow_syntax(tuple_term)
+  }
+}
+
+///|
+fn infer_type_core(
+  state : TypeCheckerState,
+  term : Term,
+) -> Result[Type, TypingError] {
+  match term {
+    Var(name) => infer_var_type(state, name)
+    Con(_, ty) => Ok(ty)
+    Lam(arg, arg_ty, body) => infer_lam_type(state, arg, arg_ty, body)
+    App(callee, arg) => infer_app_type(state, callee, arg)
+    BorrowShared(target) =>
+      infer_borrow_type(state, target, Mutability::shared(), "borrow_shared")
+    BorrowMut(target) =>
+      infer_borrow_type(state, target, Mutability::mutable(), "borrow_mut")
+    Deref(inner) => infer_deref_type(state, inner)
+    Assign(target, value) => infer_assign_type(state, target, value)
+    Move(inner) => infer_move_type(state, inner)
+    Let(name, value, body) => infer_let_type(state, name, value, body)
+    TyLam(name, kind, body) => infer_tylam_type(state, name, kind, body)
+    TyApp(term, ty) => infer_tyapp_type(state, term, ty)
+    Dict(trait_name, dict_ty, methods) =>
+      infer_dict_type(state, trait_name, dict_ty, methods)
+    TraitLam(trait_var, trait_name, type_var, kind, constraints, body) =>
+      infer_trait_lam_type(
+        state, trait_var, trait_name, type_var, kind, constraints, body,
+      )
+    TraitApp(term, ty, dicts) => infer_trait_app_type(state, term, ty, dicts)
+    TraitMethod(dict, method_name) =>
+      infer_trait_method_type(state, dict, method_name)
+    Record(fields) => infer_record_type(state, fields)
+    Project(record, label) => infer_project_type(state, record, label)
+    Inject(label, value, variant_ty) =>
+      infer_inject_type(state, label, value, variant_ty)
+    Match(scrutinee, cases) => infer_match_type(state, scrutinee, cases)
+    Fold(fold_ty, inner_term) => infer_fold_type(state, fold_ty, inner_term)
+    Unfold(inner) => infer_unfold_type(state, inner)
+    Tuple(elements) => infer_tuple_type(state, elements)
+    TupleProject(tuple_term, index) =>
+      infer_tuple_project_type(state, tuple_term, index)
+  }
+}
+
+///|
+fn infer_type_with_native_policy_flag(
+  state : TypeCheckerState,
+  term : Term,
+) -> Result[(Type, Bool), TypingError] {
+  let inferred = match infer_type_core(state, term) {
+    Ok(ty) => ty
+    Err(t) => return Err(t)
+  }
+
+  let contains_native_borrow = term_contains_native_borrow_syntax(term)
+  if contains_native_borrow {
+    match
+      state.analyze_borrows(term, inferred, BorrowCheckerOptions::default()) {
+      Ok(_) => ()
+      Err(t) => return Err(t)
+    }
+  }
+
+  Ok((inferred, contains_native_borrow))
+}
+
+///|
+fn check_type_with_native_policy_flag(
+  state : TypeCheckerState,
+  term : Term,
+  expected_type : Type,
+) -> Result[(CheckedType, Bool), TypingError] {
+  let checked = match state.check_type(term, expected_type) {
+    Ok(checked) => checked
+    Err(t) => return Err(t)
+  }
+  Ok((checked, term_contains_native_borrow_syntax(term)))
+}
+
+///|
 /// Description: Infers a type for a term.
 /// Example: `let _ = TypeCheckerState::fresh().infer_type(Term::unit())`
 pub fn TypeCheckerState::infer_type(
   self : TypeCheckerState,
   term : Term,
 ) -> Result[Type, TypingError] {
-  match term {
-    Var(name) => infer_var_type(self, name)
-    Con(_, ty) => Ok(ty)
-    Lam(arg, arg_ty, body) => infer_lam_type(self, arg, arg_ty, body)
-    App(callee, arg) => infer_app_type(self, callee, arg)
-    BorrowShared(target) =>
-      infer_borrow_type(self, target, Mutability::shared(), "borrow_shared")
-    BorrowMut(target) =>
-      infer_borrow_type(self, target, Mutability::mutable(), "borrow_mut")
-    Deref(inner) => infer_deref_type(self, inner)
-    Assign(target, value) => infer_assign_type(self, target, value)
-    Move(inner) => infer_move_type(self, inner)
-    Let(name, value, body) => infer_let_type(self, name, value, body)
-    TyLam(name, kind, body) => infer_tylam_type(self, name, kind, body)
-    TyApp(term, ty) => infer_tyapp_type(self, term, ty)
-    Dict(trait_name, dict_ty, methods) =>
-      infer_dict_type(self, trait_name, dict_ty, methods)
-    TraitLam(trait_var, trait_name, type_var, kind, constraints, body) =>
-      infer_trait_lam_type(
-        self, trait_var, trait_name, type_var, kind, constraints, body,
-      )
-    TraitApp(term, ty, dicts) => infer_trait_app_type(self, term, ty, dicts)
-    TraitMethod(dict, method_name) =>
-      infer_trait_method_type(self, dict, method_name)
-    Record(fields) => infer_record_type(self, fields)
-    Project(record, label) => infer_project_type(self, record, label)
-    Inject(label, value, variant_ty) =>
-      infer_inject_type(self, label, value, variant_ty)
-    Match(scrutinee, cases) => infer_match_type(self, scrutinee, cases)
-    Fold(fold_ty, inner_term) => infer_fold_type(self, fold_ty, inner_term)
-    Unfold(inner) => infer_unfold_type(self, inner)
-    Tuple(elements) => infer_tuple_type(self, elements)
-    TupleProject(tuple_term, index) =>
-      infer_tuple_project_type(self, tuple_term, index)
+  match infer_type_with_native_policy_flag(self, term) {
+    Ok((ty, _contains_native_borrow)) => Ok(ty)
+    Err(t) => return Err(t)
   }
 }
 

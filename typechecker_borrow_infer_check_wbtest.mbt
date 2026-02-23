@@ -60,3 +60,114 @@ test "check_type_with_borrow_analysis succeeds for pure terms when enabled" {
     _ => panic()
   }
 }
+
+///|
+fn infer_check_native_conflict_term() -> Term {
+  Term::let_term(
+    "x",
+    Term::unit(),
+    Term::tuple_project(
+      Term::tuple([
+        Term::borrow_mut(Term::var_term("x")),
+        Term::borrow_shared(Term::var_term("x")),
+        Term::unit(),
+      ]),
+      2,
+    ),
+  )
+}
+
+///|
+test "infer_type_with_borrow_analysis matches infer_type for native borrow conflicts" {
+  let state = TypeCheckerState::fresh()
+  let term = infer_check_native_conflict_term()
+  let direct = state.infer_type(term)
+  let wrapped = state.infer_type_with_borrow_analysis(
+    term,
+    BorrowCheckerOptions::default(),
+  )
+
+  assert_true(typing_error_kind_from_type_result(direct) == "BorrowConflict")
+  assert_true(typing_error_kind_from_type_result(wrapped) == "BorrowConflict")
+}
+
+///|
+test "check_type_with_borrow_analysis matches check_type for native borrow conflicts" {
+  let state = TypeCheckerState::fresh()
+  let term = infer_check_native_conflict_term()
+  let direct = state.check_type(term, Type::unit())
+  let wrapped = state.check_type_with_borrow_analysis(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+
+  assert_true(typing_error_kind_from_checked_result(direct) == "BorrowConflict")
+  assert_true(
+    typing_error_kind_from_checked_result(wrapped) == "BorrowConflict",
+  )
+}
+
+///|
+test "infer native-policy helper returns native flag false for non-borrow terms" {
+  let state = TypeCheckerState::fresh()
+  let result = infer_type_with_native_policy_flag(state, Term::unit())
+  assert_true(result is Ok(_))
+  match result {
+    Ok((Tuple(elements), false)) => assert_eq(elements.length(), 0)
+    _ => panic()
+  }
+}
+
+///|
+test "infer native-policy helper returns native flag true for native borrow terms" {
+  let state = TypeCheckerState::fresh().extend_context([
+    Binding::term("x", Type::con("Int")),
+  ])
+  let result = infer_type_with_native_policy_flag(
+    state,
+    Term::borrow_shared(Term::var_term("x")),
+  )
+  assert_true(result is Ok(_))
+  match result {
+    Ok((Ref(_, Shared, Con(inner)), true)) => assert_eq(inner, "Int")
+    _ => panic()
+  }
+}
+
+///|
+test "check native-policy helper returns native flag false for non-borrow terms" {
+  let state = TypeCheckerState::fresh()
+  let result = check_type_with_native_policy_flag(
+    state,
+    Term::unit(),
+    Type::unit(),
+  )
+  assert_true(result is Ok(_))
+  match result {
+    Ok((checked, false)) => assert_true(checked.ty == Type::unit())
+    _ => panic()
+  }
+}
+
+///|
+test "check native-policy helper returns native flag true for native borrow terms" {
+  let state = TypeCheckerState::fresh().extend_context([
+    Binding::term("x", Type::con("Int")),
+  ])
+  let expected = Type::ref_type(
+    Region::named("borrow::x"),
+    Mutability::shared(),
+    Type::con("Int"),
+  )
+  let result = check_type_with_native_policy_flag(
+    state,
+    Term::borrow_shared(Term::var_term("x")),
+    expected,
+  )
+  assert_true(result is Ok(_))
+  match result {
+    Ok((checked, true)) => assert_true(checked.ty == expected)
+    _ => panic()
+  }
+}

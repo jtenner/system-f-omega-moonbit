@@ -7,6 +7,12 @@ import {
 }
 
 // Values
+pub fn borrow_ir_match_branch_boundary_marker_name() -> String
+
+pub fn borrow_ir_schema_version() -> Int
+
+pub fn borrow_place_from_term(Term) -> Place?
+
 pub fn check_borrow_rules_placeholder(BorrowIr, RegionSolution, BorrowCheckerOptions) -> Result[BorrowFacts, TypingError]
 
 pub fn collect_region_constraints_from_ir(BorrowIr) -> Result[Array[RegionConstraint], TypingError]

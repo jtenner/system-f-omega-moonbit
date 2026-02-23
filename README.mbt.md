@@ -8,6 +8,7 @@ This library is for projects that need a typed core calculus with:
 - **polymorphism** (`Forall`, plus trait-constrained `BoundedForall`)
 - **records, variants, tuples**
 - **recursive types** (`Mu`) with explicit `fold`/`unfold`
+- **native borrow/reference forms** (`Ref`, `borrow_shared`, `borrow_mut`, `deref`, `assign`, `move`)
 - **trait dictionaries** (dictionary passing) and bounded polymorphism
 - **import/dependency helpers** for composing modules and renaming symbols
 
@@ -126,13 +127,14 @@ This package models a typed lambda calculus core and extends it with System F an
 * `Record` / `Project` — records and field projection
 * `Variant` / `Inject` / `Match` — sum types and pattern matching
 * `Tuple` / `TupleProject` — tuples and projections
+* `BorrowShared` / `BorrowMut` / `Deref` / `Assign` / `Move` — native borrow operations
 * `Mu` + `Fold` / `Unfold` — explicit recursion boundary at the value level
 * `Dict` / `TraitLam` / `TraitApp` / `TraitMethod` — dictionary passing for constrained polymorphism
 
 ### Type calculus (types, kinds, and higher-kinded programming)
 
 * `Kind`: `Star` and `Arrow(Kind, Kind)`
-* `Type`: `Arrow`, `Forall`, `BoundedForall`, `Lam`, `App`, plus structural `Record`, `Variant`, `Tuple`, and recursive `Mu`
+* `Type`: `Arrow`, `Forall`, `BoundedForall`, `Lam`, `App`, borrow `Ref(region, mutability, inner)`, plus structural `Record`, `Variant`, `Tuple`, and recursive `Mu`
 * `EVar` metavariables for inference/unification
 
 ---
@@ -358,6 +360,47 @@ Dispatch between infer/check modes, useful when building pipelines.
 
 Constraint-driven alternative entry point; useful if you want explicit constraint queueing.
 
+### Borrow/lifetime behavior (native terms)
+
+Native borrow syntax:
+
+* `Term::borrow_shared(target)`
+* `Term::borrow_mut(target)`
+* `Term::deref(term)`
+* `Term::assign(target, value)`
+* `Term::move_term(term)`
+
+Reference type constructor:
+
+* `Type::ref_type(region, mutability, inner)`
+
+Current semantics:
+
+* `infer_type` is the primary policy entry for native borrow checking. If a term contains native borrow syntax, borrow analysis runs in the core infer/check flow.
+* `infer_type_with_borrow_analysis` and `check_type_with_borrow_analysis` still run wrapper analysis for non-native/probe terms, but skip redundant re-analysis for native borrow syntax by threading native-policy flags from core helpers.
+* Core and wrapper gating use the same native-syntax detector (`term_contains_native_borrow_syntax`) to keep policy decisions consistent.
+* Native borrow target validation is canonicalized through `borrow_place_from_term`, which is shared by typing and borrow-IR lowering.
+* Inferred native references use deterministic region naming: `borrow::<place_key>`.
+  * Examples: `x -> borrow::x`, `x.field -> borrow::x.field`, `deref(p) -> borrow::p.*`, `x.0 -> borrow::x.0`.
+* When checking `BorrowShared` / `BorrowMut` against an expected `Ref`, region and mutability must match the inferred native borrow reference; mismatches produce `TypeMismatch`.
+* Match-branch moved-place state now uses a deterministic path-sensitive join (set intersection across sibling branches), so values moved on only one branch are not treated as globally moved after the join.
+* Region probe operations in borrow IR now emit/check structural region constraints instead of relying on sentinel `__err_*` placeholders during runtime analysis.
+
+Stable borrow IR schema:
+
+* `borrow_ir_schema_version()` currently returns `1`.
+* Match branch joins are encoded as explicit boundary nodes with constructor name `borrow_ir_match_branch_boundary_marker_name()` (`"BorrowIrBoundaryMatchBranch"`).
+* Generalized borrow-op constructor encoding is:
+  * `BorrowOp<OpName>__<root>__(field:<label>|tuple:<index>|deref)*`
+  * Examples: `BorrowOpBorrowShared__x`, `BorrowOpBorrowMut__x__field:left__deref`, `BorrowOpMove__q__field:a__tuple:1`.
+* Generalized region/invalid probe encodings are:
+  * `BorrowOpRegionOutlivesOwner__<place>`
+  * `BorrowOpRegionDanglingEscape__<place>`
+  * `BorrowOpRegionUnsatisfied__<left_region>__<right_region>` where region tokens use `named:<name>`, `infer:<id>`, or `static`
+  * `BorrowOpInvalidTarget__<operation_name>`
+* Legacy fixed tags like `BorrowOpBorrowMutX` / `BorrowOpBorrowSharedXField` are treated as ordinary constructors; tests/builders now use generalized path-based tags.
+* Legacy fixed region/invalid tags (`BorrowOpRegionOutlivesOwner`, `BorrowOpRegionDanglingEscape`, `BorrowOpRegionUnsatisfied`, `BorrowOpInvalidTarget`) are also treated as ordinary constructors.
+
 ### Equality, assignability, unification
 
 #### `types_equal(left, right) -> Bool`
@@ -580,4 +623,4 @@ Workspace Moon binary:
 * Many APIs return updated `TypeCheckerState`; prefer explicit reassignment in build pipelines.
 * For diagnostics, pattern-match `TypingError` rather than relying on string rendering.
 * Use `normalize_type` before comparisons when aliases/enums/metas are in play.
-
+* `BorrowCheckerOptions::disabled()` disables wrapper orchestration, but direct `infer_type` / `check_type` still enforce native borrow semantics.

@@ -17,6 +17,35 @@ fn region_for_node(node_id : Int) -> Region {
 }
 
 ///|
+/// Description: Stable schema marker used for match-branch join boundaries in borrow IR.
+/// Example: `let _ = borrow_ir_match_branch_boundary_marker_name()`
+pub fn borrow_ir_match_branch_boundary_marker_name() -> String {
+  "BorrowIrBoundaryMatchBranch"
+}
+
+///|
+/// Description: Stable borrow-IR schema version for operation-tag and boundary-node encoding.
+/// Example: `let _ = borrow_ir_schema_version()`
+pub fn borrow_ir_schema_version() -> Int {
+  1
+}
+
+///|
+fn borrow_ir_match_branch_boundary_term() -> Term {
+  Term::con(borrow_ir_match_branch_boundary_marker_name(), Type::unit())
+}
+
+///|
+fn is_borrow_ir_match_branch_boundary_term(term : Term) -> Bool {
+  match term {
+    Con(name, Tuple(elements)) =>
+      name == borrow_ir_match_branch_boundary_marker_name() &&
+      elements.length() == 0
+    _ => false
+  }
+}
+
+///|
 priv enum BorrowOperation {
   BorrowSharedOperation(Place)
   BorrowMutOperation(Place)
@@ -26,40 +55,144 @@ priv enum BorrowOperation {
   AssignImmutableOperation(Place)
   ReleaseOperation(Place)
   InvalidTargetOperation(String)
-  RegionOutlivesOwnerOperation
-  RegionDanglingEscapeOperation
-  RegionUnsatisfiedOperation
+  RegionOutlivesOwnerOperation(Place)
+  RegionDanglingEscapeOperation(Place)
+  RegionUnsatisfiedOperation(RegionConstraint)
+}
+
+///|
+fn parse_region_schema_token(token : String) -> Region? {
+  if token.is_empty() {
+    return None
+  }
+
+  if token == "static" {
+    return Some(Region::static_region())
+  }
+
+  match token.strip_prefix("infer:") {
+    Some(id_token) =>
+      match parse_tuple_index_token(id_token.to_string()) {
+        Some(id) => return Some(Region::infer(id))
+        None => return None
+      }
+    None => ()
+  }
+
+  match token.strip_prefix("named:") {
+    Some(name) => {
+      let name = name.to_string()
+      if name.is_empty() {
+        return None
+      }
+      return Some(Region::named(name))
+    }
+    None => ()
+  }
+
+  Some(Region::named(token))
+}
+
+///|
+fn parse_borrow_operation_parts(payload : String) -> Array[String] {
+  payload.split("__").map(StringView::to_string).collect()
+}
+
+///|
+fn parse_region_outlives_owner_operation(
+  constructor_name : String,
+) -> BorrowOperation? {
+  match constructor_name.strip_prefix("BorrowOpRegionOutlivesOwner__") {
+    Some(place_payload) =>
+      match
+        parse_borrow_place_tokens(
+          parse_borrow_operation_parts(place_payload.to_string()),
+        ) {
+        Some(place) => Some(RegionOutlivesOwnerOperation(place))
+        None => None
+      }
+    None => None
+  }
+}
+
+///|
+fn parse_region_dangling_escape_operation(
+  constructor_name : String,
+) -> BorrowOperation? {
+  match constructor_name.strip_prefix("BorrowOpRegionDanglingEscape__") {
+    Some(place_payload) =>
+      match
+        parse_borrow_place_tokens(
+          parse_borrow_operation_parts(place_payload.to_string()),
+        ) {
+        Some(place) => Some(RegionDanglingEscapeOperation(place))
+        None => None
+      }
+    None => None
+  }
+}
+
+///|
+fn parse_region_unsatisfied_operation(
+  constructor_name : String,
+) -> BorrowOperation? {
+  match constructor_name.strip_prefix("BorrowOpRegionUnsatisfied__") {
+    Some(region_payload) => {
+      let parts = parse_borrow_operation_parts(region_payload.to_string())
+      if parts.length() != 2 {
+        return None
+      }
+      let left = match parse_region_schema_token(parts[0]) {
+        Some(region) => region
+        None => return None
+      }
+      let right = match parse_region_schema_token(parts[1]) {
+        Some(region) => region
+        None => return None
+      }
+      Some(RegionUnsatisfiedOperation(RegionConstraint::outlives(left, right)))
+    }
+    None => None
+  }
+}
+
+///|
+fn parse_invalid_target_operation(
+  constructor_name : String,
+) -> BorrowOperation? {
+  match constructor_name.strip_prefix("BorrowOpInvalidTarget__") {
+    Some(operation_name) => {
+      let operation_name = operation_name.to_string()
+      if operation_name.is_empty() {
+        return None
+      }
+      Some(InvalidTargetOperation(operation_name))
+    }
+    None => None
+  }
 }
 
 ///|
 fn parse_borrow_operation_from_constructor_name(
   constructor_name : String,
 ) -> BorrowOperation? {
-  match constructor_name {
-    "BorrowOpBorrowSharedX" => Some(BorrowSharedOperation(Place::root("x")))
-    "BorrowOpBorrowSharedXField" =>
-      Some(BorrowSharedOperation(Place::root("x").field("field")))
-    "BorrowOpBorrowSharedY" => Some(BorrowSharedOperation(Place::root("y")))
-    "BorrowOpBorrowMutX" => Some(BorrowMutOperation(Place::root("x")))
-    "BorrowOpBorrowMutXField" =>
-      Some(BorrowMutOperation(Place::root("x").field("field")))
-    "BorrowOpMoveX" => Some(MoveOperation(Place::root("x")))
-    "BorrowOpMoveXField" => Some(MoveOperation(Place::root("x").field("field")))
-    "BorrowOpUseX" => Some(UseOperation(Place::root("x")))
-    "BorrowOpUseXField" => Some(UseOperation(Place::root("x").field("field")))
-    "BorrowOpUseY" => Some(UseOperation(Place::root("y")))
-    "BorrowOpAssignMutableX" => Some(AssignMutableOperation(Place::root("x")))
-    "BorrowOpAssignImmutableX" =>
-      Some(AssignImmutableOperation(Place::root("x")))
-    "BorrowOpReleaseX" => Some(ReleaseOperation(Place::root("x")))
-    "BorrowOpInvalidTarget" =>
-      Some(InvalidTargetOperation("BorrowOpInvalidTarget"))
-    "BorrowOpRegionOutlivesOwner" => Some(RegionOutlivesOwnerOperation)
-    "BorrowOpRegionDanglingEscape" => Some(RegionDanglingEscapeOperation)
-    "BorrowOpRegionUnsatisfied" => Some(RegionUnsatisfiedOperation)
-    _ =>
-      parse_generalized_borrow_operation_from_constructor_name(constructor_name)
+  match parse_region_outlives_owner_operation(constructor_name) {
+    Some(operation) => return Some(operation)
+    None => ()
   }
+  match parse_region_dangling_escape_operation(constructor_name) {
+    Some(operation) => return Some(operation)
+    None => ()
+  }
+  match parse_region_unsatisfied_operation(constructor_name) {
+    Some(operation) => return Some(operation)
+    None => ()
+  }
+  match parse_invalid_target_operation(constructor_name) {
+    Some(operation) => return Some(operation)
+    None => ()
+  }
+  parse_generalized_borrow_operation_from_constructor_name(constructor_name)
 }
 
 ///|
@@ -136,6 +269,12 @@ fn parse_borrow_place_tokens(tokens : Array[String]) -> Place? {
 fn parse_generalized_borrow_operation_from_constructor_name(
   constructor_name : String,
 ) -> BorrowOperation? {
+  // Stable generalized operation schema:
+  // `BorrowOp<OpName>__<root>__(field:<label>|tuple:<index>|deref)*`
+  // Examples:
+  // - BorrowOpBorrowShared__x
+  // - BorrowOpBorrowMut__x__field:left__deref
+  // - BorrowOpMove__q__field:a__tuple:1
   let parts : Array[String] = constructor_name
     .split("__")
     .map(StringView::to_string)
@@ -220,11 +359,28 @@ fn place_from_term(term : Term) -> Place? {
 }
 
 ///|
+/// Description: Canonical place extraction shared by typing and borrow-IR lowering.
+/// Example: `let _ = borrow_place_from_term(Term::var_term("x"))`
+pub fn borrow_place_from_term(term : Term) -> Place? {
+  place_from_term(term)
+}
+
+///|
 fn borrow_operation_from_intrinsic_name(name : String) -> BorrowOperation? {
   match name {
-    "region_outlives_owner" => Some(RegionOutlivesOwnerOperation)
-    "region_dangling_escape" => Some(RegionDanglingEscapeOperation)
-    "region_unsatisfied" => Some(RegionUnsatisfiedOperation)
+    "region_outlives_owner" =>
+      Some(RegionOutlivesOwnerOperation(Place::root("region_probe")))
+    "region_dangling_escape" =>
+      Some(RegionDanglingEscapeOperation(Place::root("region_probe")))
+    "region_unsatisfied" =>
+      Some(
+        RegionUnsatisfiedOperation(
+          RegionConstraint::outlives(
+            Region::named("region_probe::left"),
+            Region::named("region_probe::right"),
+          ),
+        ),
+      )
     "invalid_borrow_target" => Some(InvalidTargetOperation(name))
     _ => None
   }
@@ -311,9 +467,29 @@ fn borrow_operation_from_intrinsic_unary_call(
         Some(place) => Some(AssignImmutableOperation(place))
         None => Some(InvalidTargetOperation("assign_const"))
       }
-    "region_outlives_owner" => Some(RegionOutlivesOwnerOperation)
-    "region_dangling_escape" => Some(RegionDanglingEscapeOperation)
-    "region_unsatisfied" => Some(RegionUnsatisfiedOperation)
+    "region_outlives_owner" =>
+      match place_from_term(target) {
+        Some(place) => Some(RegionOutlivesOwnerOperation(place))
+        None => Some(InvalidTargetOperation("region_outlives_owner"))
+      }
+    "region_dangling_escape" =>
+      match place_from_term(target) {
+        Some(place) => Some(RegionDanglingEscapeOperation(place))
+        None => Some(InvalidTargetOperation("region_dangling_escape"))
+      }
+    "region_unsatisfied" =>
+      match place_from_term(target) {
+        Some(place) =>
+          Some(
+            RegionUnsatisfiedOperation(
+              RegionConstraint::outlives(
+                Region::named("region::" + place_key(place)),
+                Region::named("region::required"),
+              ),
+            ),
+          )
+        None => Some(InvalidTargetOperation("region_unsatisfied"))
+      }
     _ => None
   }
 }
@@ -510,6 +686,102 @@ fn has_overlapping_moved_place(
 }
 
 ///|
+priv struct MatchBranchMoveFrame {
+  scope_depth : Int
+  remaining_boundaries : Int
+  base_places : Array[Place]
+  base_place_keys : Set[String]
+  meet_places : Array[Place]?
+  meet_place_keys : Set[String]?
+}
+
+///|
+fn clone_moved_places(places : Array[Place]) -> Array[Place] {
+  let cloned : Array[Place] = []
+  for place in places {
+    cloned.push(place)
+  }
+  cloned
+}
+
+///|
+fn clone_moved_place_keys(keys : Set[String]) -> Set[String] {
+  let cloned : Set[String] = Set::new()
+  for key in keys {
+    cloned.add(key)
+  }
+  cloned
+}
+
+///|
+fn clear_moved_place_keys(keys : Set[String]) -> Unit {
+  let snapshot = keys.to_array()
+  for key in snapshot {
+    keys.remove(key)
+  }
+}
+
+///|
+fn replace_moved_place_state(
+  moved_places : Array[Place],
+  moved_place_keys : Set[String],
+  next_places : Array[Place],
+  next_keys : Set[String],
+) -> Unit {
+  while moved_places.length() > 0 {
+    ignore(moved_places.pop())
+  }
+  clear_moved_place_keys(moved_place_keys)
+
+  for place in next_places {
+    moved_places.push(place)
+  }
+  for key in next_keys {
+    moved_place_keys.add(key)
+  }
+}
+
+///|
+fn record_moved_place(
+  moved_places : Array[Place],
+  moved_place_keys : Set[String],
+  place : Place,
+) -> Unit {
+  let key = place_key(place)
+  if moved_place_keys.contains(key) {
+    return
+  }
+  moved_places.push(place)
+  moved_place_keys.add(key)
+}
+
+///|
+fn intersect_moved_place_states(
+  left_places : Array[Place],
+  left_keys : Set[String],
+  right_keys : Set[String],
+) -> (Array[Place], Set[String]) {
+  let intersected_keys : Set[String] = Set::new()
+  for key in left_keys {
+    if right_keys.contains(key) {
+      intersected_keys.add(key)
+    }
+  }
+
+  let intersected_places : Array[Place] = []
+  let seen : Set[String] = Set::new()
+  for place in left_places {
+    let key = place_key(place)
+    if intersected_keys.contains(key) && !seen.contains(key) {
+      intersected_places.push(place)
+      seen.add(key)
+    }
+  }
+
+  (intersected_places, intersected_keys)
+}
+
+///|
 fn assignment_reinitializes_moved_place(
   assigned_place : Place,
   moved_place : Place,
@@ -598,12 +870,9 @@ fn region_constraint_for_operation(
           region_for_node(node_id),
         ),
       )
-    RegionOutlivesOwnerOperation =>
-      Some(RegionConstraint::placeholder("__err_borrow_outlives_owner"))
-    RegionDanglingEscapeOperation =>
-      Some(RegionConstraint::placeholder("__err_dangling_reference_escape"))
-    RegionUnsatisfiedOperation =>
-      Some(RegionConstraint::placeholder("__err_region_constraint_unsatisfied"))
+    RegionOutlivesOwnerOperation(_) => None
+    RegionDanglingEscapeOperation(_) => None
+    RegionUnsatisfiedOperation(_) => None
     _ => None
   }
 }
@@ -678,7 +947,11 @@ fn lower_term_into_ir(
         let (_, body_term) = case_entry
         cursor = lower_term_into_ir(body_term, scope_depth + 1, cursor, nodes)
         // Boundary node at parent scope separates sibling branches.
-        nodes.push(BorrowIrNode::{ id: cursor, term: Term::unit(), scope_depth })
+        nodes.push(BorrowIrNode::{
+          id: cursor,
+          term: borrow_ir_match_branch_boundary_term(),
+          scope_depth,
+        })
         cursor = cursor + 1
       }
     }
@@ -770,6 +1043,20 @@ fn solution_has_outlives_edge(
   match solved.outlives.get(from) {
     Some(tos) => tos.contains(to)
     None => false
+  }
+}
+
+///|
+fn solution_satisfies_region_constraint(
+  solved : RegionSolution,
+  constraint : RegionConstraint,
+) -> Bool {
+  match constraint {
+    Outlives(from, to) => solution_has_outlives_edge(solved, from, to)
+    Equal(left, right) =>
+      solution_has_outlives_edge(solved, left, right) &&
+      solution_has_outlives_edge(solved, right, left)
+    Placeholder(_) => false
   }
 }
 
@@ -1126,6 +1413,7 @@ pub fn check_borrow_rules_placeholder(
   let moved_places : Array[Place] = []
   let moved_place_keys : Set[String] = Set::new()
   let constraints : Array[RegionConstraint] = []
+  let match_move_frames : Array[MatchBranchMoveFrame] = []
   let mut next_loan_id = 0
 
   for node in ir.nodes {
@@ -1134,6 +1422,82 @@ pub fn check_borrow_rules_placeholder(
       scope_depth = 0
     }
     release_loans_outside_lexical_scope(loans, loan_scope_depths, scope_depth)
+
+    match node.term {
+      Match(_, cases) =>
+        if cases.length() > 0 {
+          match_move_frames.push(MatchBranchMoveFrame::{
+            scope_depth,
+            remaining_boundaries: cases.length(),
+            base_places: clone_moved_places(moved_places),
+            base_place_keys: clone_moved_place_keys(moved_place_keys),
+            meet_places: None,
+            meet_place_keys: None,
+          })
+        }
+      _ => ()
+    }
+
+    if is_borrow_ir_match_branch_boundary_term(node.term) &&
+      match_move_frames.length() > 0 {
+      let frame_index = match_move_frames.length() - 1
+      let frame = match_move_frames[frame_index]
+      if frame.scope_depth == scope_depth && frame.remaining_boundaries > 0 {
+        let branch_places = clone_moved_places(moved_places)
+        let branch_keys = clone_moved_place_keys(moved_place_keys)
+
+        let next_meet = match (frame.meet_places, frame.meet_place_keys) {
+          (Some(meet_places), Some(meet_keys)) =>
+            Some(
+              intersect_moved_place_states(meet_places, meet_keys, branch_keys),
+            )
+          _ => Some((branch_places, branch_keys))
+        }
+        let next_meet_places = match next_meet {
+          Some(pair) => Some(pair.0)
+          None => None
+        }
+        let next_meet_keys = match next_meet {
+          Some(pair) => Some(pair.1)
+          None => None
+        }
+
+        let remaining = frame.remaining_boundaries - 1
+        let updated_frame = MatchBranchMoveFrame::{
+          scope_depth: frame.scope_depth,
+          remaining_boundaries: remaining,
+          base_places: frame.base_places,
+          base_place_keys: frame.base_place_keys,
+          meet_places: next_meet_places,
+          meet_place_keys: next_meet_keys,
+        }
+
+        if remaining > 0 {
+          match_move_frames[frame_index] = updated_frame
+          replace_moved_place_state(
+            moved_places,
+            moved_place_keys,
+            updated_frame.base_places,
+            updated_frame.base_place_keys,
+          )
+        } else {
+          replace_moved_place_state(
+            moved_places,
+            moved_place_keys,
+            match updated_frame.meet_places {
+              Some(places) => places
+              None => updated_frame.base_places
+            },
+            match updated_frame.meet_place_keys {
+              Some(keys) => keys
+              None => updated_frame.base_place_keys
+            },
+          )
+          ignore(match_move_frames.pop())
+        }
+        continue
+      }
+    }
 
     match borrow_operation_from_term(node.term) {
       Some(BorrowSharedOperation(place)) => {
@@ -1192,10 +1556,8 @@ pub fn check_borrow_rules_placeholder(
           }
         }
       }
-      Some(MoveOperation(place)) => {
-        moved_places.push(place)
-        moved_place_keys.add(place_key(place))
-      }
+      Some(MoveOperation(place)) =>
+        record_moved_place(moved_places, moved_place_keys, place)
       Some(UseOperation(place)) =>
         if has_overlapping_moved_place(moved_places, place) {
           return Err(UseAfterMove(place_key(place)))
@@ -1216,18 +1578,32 @@ pub fn check_borrow_rules_placeholder(
             operation_name + " target is not a valid place expression",
           ),
         )
-      Some(RegionOutlivesOwnerOperation) =>
-        constraints.push(
-          RegionConstraint::placeholder("__err_borrow_outlives_owner"),
+      Some(RegionOutlivesOwnerOperation(place)) => {
+        let required = RegionConstraint::outlives(
+          owner_region_for_place(place),
+          region_for_node(node.id),
         )
-      Some(RegionDanglingEscapeOperation) =>
-        constraints.push(
-          RegionConstraint::placeholder("__err_dangling_reference_escape"),
+        constraints.push(required)
+        if !solution_satisfies_region_constraint(solved, required) {
+          return Err(BorrowOutlivesOwner(place_key(place)))
+        }
+      }
+      Some(RegionDanglingEscapeOperation(place)) => {
+        let required = RegionConstraint::outlives(
+          region_for_node(node.id),
+          owner_region_for_place(place),
         )
-      Some(RegionUnsatisfiedOperation) =>
-        constraints.push(
-          RegionConstraint::placeholder("__err_region_constraint_unsatisfied"),
-        )
+        constraints.push(required)
+        if !solution_satisfies_region_constraint(solved, required) {
+          return Err(DanglingReferenceEscape(place_key(place)))
+        }
+      }
+      Some(RegionUnsatisfiedOperation(required)) => {
+        constraints.push(required)
+        if !solution_satisfies_region_constraint(solved, required) {
+          return Err(RegionConstraintUnsatisfied(required))
+        }
+      }
       None => ()
     }
   }
@@ -1327,9 +1703,14 @@ pub fn TypeCheckerState::infer_type_with_borrow_analysis(
     return self.infer_type(term)
   }
 
-  let inferred = match self.infer_type(term) {
-    Ok(ty) => ty
+  let inferred_with_native_flag = match
+    infer_type_with_native_policy_flag(self, term) {
+    Ok(result) => result
     Err(t) => return Err(t)
+  }
+  let inferred = inferred_with_native_flag.0
+  if inferred_with_native_flag.1 {
+    return Ok(inferred)
   }
 
   match self.analyze_borrows(term, inferred, options) {
@@ -1351,9 +1732,14 @@ pub fn TypeCheckerState::check_type_with_borrow_analysis(
     return self.check_type(term, expected)
   }
 
-  let checked = match self.check_type(term, expected) {
-    Ok(checked) => checked
+  let checked_with_native_flag = match
+    check_type_with_native_policy_flag(self, term, expected) {
+    Ok(result) => result
     Err(t) => return Err(t)
+  }
+  let checked = checked_with_native_flag.0
+  if checked_with_native_flag.1 {
+    return Ok(checked)
   }
 
   match self.analyze_borrows(term, checked.ty, options) {

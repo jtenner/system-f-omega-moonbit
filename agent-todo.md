@@ -1,45 +1,56 @@
-# Agent TODO: Borrow Checker and Lifetime Backlog
+# Agent TODO: Remaining Backlog
 
-## Verified State (2026-02-22)
-- Library tests are green: `/home/jtenner/.moon/bin/moon test --package jtenner/sfo` -> `Total tests: 655, passed: 655, failed: 0`.
-- Completed historical tasks were audited and removed from this list.
-- This backlog now contains only unfinished, concrete tasks.
+## Verified State (2026-02-23)
+- Library tests are green: `/home/jtenner/.moon/bin/moon test --package jtenner/sfo` -> `Total tests: 690, passed: 690, failed: 0`.
+- Completed items were removed during cleanup. This file tracks only unfinished work.
 
-## Priority P0: Native Borrow Semantics in Core Typechecker
-- [x] Add native borrow forms to core AST and types (`Type::Ref`, borrow term constructors) in `types.mbt`, and regenerate API with `moon info`.
-- [x] Implement infer/check rules for native borrow terms in `typechecker.mbt` so borrow programs typecheck without intrinsic-name placeholders.
-- [ ] Wire borrow analysis into the primary infer/check flow policy (not wrapper-only behavior), while preserving non-borrow behavior.
-- [x] Replace wrapper-level dependency on unbound intrinsic vars (`borrow_shared`, `borrow_mut`, etc.) with typed native borrow syntax.
-- [x] Add focused whitebox tests for native borrow typing (shared borrow, mutable borrow, deref, assign, move).
+## Priority P0: README Beginner Guide and Full-Library Examples
+- [ ] Rewrite `README.mbt.md` intro for type-theory beginners with a step-by-step mental model: `Kind`, `Type`, `Term`, `TypeCheckerState`, and context/meta state.
+- [ ] Add a "Borrow Checker Quickstart" section with a runnable `Term::borrow_shared` example pair (accepted + rejected) and explanation.
+- [ ] Add a "Borrow Checker Quickstart" section with a runnable `Term::borrow_mut` example pair (accepted + rejected) and explanation.
+- [ ] Add a "Borrow Checker Quickstart" section with a runnable `Term::deref` example pair (accepted + rejected) and explanation.
+- [ ] Add a "Borrow Checker Quickstart" section with a runnable `Term::assign` example pair (accepted + rejected) and explanation.
+- [ ] Add a "Borrow Checker Quickstart" section with a runnable `Term::move_term` example pair (accepted + rejected) and explanation.
+- [ ] Add "Borrow Errors and Fix Patterns" coverage for `UseAfterMove` with minimal failing program and fix.
+- [ ] Add "Borrow Errors and Fix Patterns" coverage for `MovedValueBorrow` with minimal failing program and fix.
+- [ ] Add "Borrow Errors and Fix Patterns" coverage for `BorrowConflict` with minimal failing program and fix.
+- [ ] Add "Borrow Errors and Fix Patterns" coverage for `MutateWhileBorrowed` with minimal failing program and fix.
+- [ ] Add "Borrow Errors and Fix Patterns" coverage for `AssignToImmutable` with minimal failing program and fix.
+- [ ] Add "Borrow Errors and Fix Patterns" coverage for `BorrowOutlivesOwner` with minimal failing program and fix.
+- [ ] Add "Borrow Errors and Fix Patterns" coverage for `DanglingReferenceEscape` with minimal failing program and fix.
+- [ ] Add "Borrow Errors and Fix Patterns" coverage for `InvalidBorrowTarget` with minimal failing program and fix.
+- [ ] Add "Borrow Errors and Fix Patterns" coverage for `RegionConstraintUnsatisfied` with minimal failing program and fix.
+- [ ] Add a beginner cookbook example for higher-kinded types and kind checking.
+- [ ] Add a beginner cookbook example for type-level lambdas and type application.
+- [ ] Add a beginner cookbook example for `Forall` and `BoundedForall`.
+- [ ] Add a beginner cookbook example for traits, dictionaries, and bounded polymorphism.
+- [ ] Add a beginner cookbook example for records, variants, tuples, and pattern matching.
+- [ ] Add a beginner cookbook example for recursive types (`Mu`) with `fold`/`unfold`.
+- [ ] Add a beginner cookbook example for module import/dependency helpers and rename APIs.
+- [ ] Add a compact "From Error to Fix" troubleshooting table mapping common `TypingError` variants to likely causes and first debugging steps.
+- [ ] Create/update whitebox doc-smoke tests for key README snippets so examples remain executable.
+- [ ] Require `/home/jtenner/.moon/bin/moon test --package jtenner/sfo` after README edits and record the result in backlog updates.
 
-### P0 follow-ups discovered (2026-02-22)
-- [ ] Define deterministic region allocation semantics for native `Type::Ref` inference (current implementation uses `Region::static_region()` as a temporary default).
-- [ ] Tighten native borrow target validation so `infer/check` and borrow IR lowering share one canonical place-extraction routine.
-- [ ] Add focused tests for native `check_type` region/mutability mismatch behavior (`Ref` expected type interactions).
-
-## Priority P1: IR and Region Soundness
-- [ ] Define and document a stable borrow IR schema for control flow, places, and scope boundaries in `borrow_scaffold.mbt`.
-- [ ] Replace sentinel placeholder region errors (`__err_*`) in runtime semantics with structural region constraints derived from IR.
-- [ ] Implement deterministic branch-join merge for moved-place state (path-sensitive meet instead of linear accumulation).
+## Priority P1: Borrow Soundness and Policy Consolidation
+- [ ] Split `check_type` into explicit core/policy layers so fallback infer paths can reuse native-policy analysis state instead of re-scanning terms in mixed infer/check flows.
 - [ ] Extend region constraint generation for trait dictionary flow and polymorphic boundaries.
 - [ ] Add explicit tests for region safety across trait abstraction and polymorphic generalization boundaries.
+- [ ] Remove legacy `collect_known_region_probe_errors` sentinel special-casing once direct placeholder compatibility tests are migrated to structural region-op programs.
+- [ ] Add focused coverage for generalized `BorrowOpRegionUnsatisfied` region token forms beyond `named:<...>` (`infer:<id>`, `static`) and verify payload shape.
 
 ## Priority P2: Probe Removal and Test Migration
-- [ ] Retire probe-only error-path scaffolding (`borrow_probe_term`, `__err_*`-driven scenarios) once native borrow terms are in place.
-- [ ] Replace remaining fixed support builders that emit legacy `BorrowOp...X` markers with generalized path-based builders.
-- [ ] Keep equivalent semantic coverage by migrating probe tests to real borrow AST programs before deleting probe tests.
-- [ ] Remove any remaining semantic coupling to constructor-name tags in `borrow_scaffold.mbt`.
+- [ ] Migrate remaining probe-based error tests to real borrow AST programs while preserving semantic coverage.
+- [ ] Retire probe-only scaffolding (`borrow_probe_term`, `__err_*`-driven scenarios) after equivalent native/semantic coverage is confirmed.
 
 ## Priority P3: Diagnostics and Developer UX
 - [ ] Finalize actionable payload formats for all borrow/lifetime errors in `types.mbt` (especially `BorrowConflict`).
 - [ ] Add payload assertions in tests for all borrow/lifetime errors (operation, place path, active/conflicting loan context, region constraint).
 - [ ] Implement robust `Show`/pretty rendering for borrow structures and borrow/lifetime errors in `show.mbt`.
-- [ ] Add a short borrow/lifetime guide with examples and fix patterns in project docs.
 
 ## Priority P4: Code Organization and Maintenance
 - [ ] Split `borrow_scaffold.mbt` into focused modules (`borrow_ir.mbt`, `region_solver.mbt`, `borrow_checker.mbt`) with no behavior regression.
 - [ ] Regenerate and review `pkg.generated.mbti` after each API-affecting change.
-- [ ] Keep `moon fmt` and `/home/jtenner/.moon/bin/moon test --package jtenner/sfo` green after each vertical slice.
+- [ ] Keep `/home/jtenner/.moon/bin/moon fmt` and `/home/jtenner/.moon/bin/moon test --package jtenner/sfo` green after each vertical slice.
 
 ## Validation Commands
 - `/home/jtenner/.moon/bin/moon test --package jtenner/sfo`

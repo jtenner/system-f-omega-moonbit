@@ -120,62 +120,66 @@ fn borrow_feature_program_lambda(op_names : Array[String]) -> Term {
 fn borrow_feature_ops_for_tag(tag : String) -> Array[String] {
   if tag.contains("safe_shared_read_") {
     return [
-      "BorrowOpBorrowSharedX", "BorrowOpBorrowSharedXField", "BorrowOpUseXField",
+      "BorrowOpBorrowShared__x", "BorrowOpBorrowShared__x__field:field", "BorrowOpUse__x__field:field",
     ]
   }
   if tag.contains("safe_mut_reborrow_") {
-    return ["BorrowOpBorrowMutX", "BorrowOpReleaseX", "BorrowOpBorrowMutX"]
+    return [
+      "BorrowOpBorrowMut__x", "BorrowOpRelease__x", "BorrowOpBorrowMut__x",
+    ]
   }
   if tag.contains("safe_nll_last_use_") {
     return [
-      "BorrowOpBorrowSharedX", "BorrowOpReleaseX", "BorrowOpAssignMutableX",
+      "BorrowOpBorrowShared__x", "BorrowOpRelease__x", "BorrowOpAssignMutable__x",
     ]
   }
   if tag.contains("safe_branch_join_") {
     return [
-      "BorrowOpBorrowSharedXField", "BorrowOpReleaseX", "BorrowOpBorrowSharedX",
+      "BorrowOpBorrowShared__x__field:field", "BorrowOpRelease__x", "BorrowOpBorrowShared__x",
     ]
   }
   if tag.contains("safe_trait_poly_") {
-    return ["BorrowOpBorrowSharedY", "BorrowOpUseY"]
+    return ["BorrowOpBorrowShared__y", "BorrowOpUse__y"]
   }
   if tag.contains("safe_recursive_projection_") {
-    return ["BorrowOpBorrowSharedXField", "BorrowOpUseXField"]
+    return [
+      "BorrowOpBorrowShared__x__field:field", "BorrowOpUse__x__field:field",
+    ]
   }
   if tag.contains("err_borrow_conflict_") {
-    return ["BorrowOpBorrowMutX", "BorrowOpBorrowSharedXField"]
+    return ["BorrowOpBorrowMut__x", "BorrowOpBorrowShared__x__field:field"]
   }
   if tag.contains("err_use_after_move_") {
-    return ["BorrowOpMoveX", "BorrowOpUseX"]
+    return ["BorrowOpMove__x", "BorrowOpUse__x"]
   }
   if tag.contains("err_moved_value_borrow_") {
-    return ["BorrowOpMoveX", "BorrowOpBorrowSharedX"]
+    return ["BorrowOpMove__x", "BorrowOpBorrowShared__x"]
   }
   if tag.contains("err_assign_to_immutable_") {
-    return ["BorrowOpAssignImmutableX"]
+    return ["BorrowOpAssignImmutable__x"]
   }
   if tag.contains("err_mutate_while_borrowed_") {
-    return ["BorrowOpBorrowSharedX", "BorrowOpAssignMutableX"]
+    return ["BorrowOpBorrowShared__x", "BorrowOpAssignMutable__x"]
   }
   if tag.contains("err_outlives_owner_") {
-    return ["BorrowOpRegionOutlivesOwner"]
+    return ["BorrowOpRegionOutlivesOwner__x"]
   }
   if tag.contains("err_dangling_escape_") {
-    return ["BorrowOpRegionDanglingEscape"]
+    return ["BorrowOpRegionDanglingEscape__x"]
   }
   if tag.contains("err_region_unsatisfied_") {
-    return ["BorrowOpRegionUnsatisfied"]
+    return ["BorrowOpRegionUnsatisfied__named:alpha__named:omega"]
   }
   if tag.contains("err_invalid_target_") {
-    return ["BorrowOpInvalidTarget"]
+    return ["BorrowOpInvalidTarget__borrow_shared"]
   }
   if tag.contains("err_trait_escape_") {
-    return ["BorrowOpRegionDanglingEscape"]
+    return ["BorrowOpRegionDanglingEscape__y"]
   }
   if tag.contains("err_partial_move_projection_") {
-    return ["BorrowOpMoveXField", "BorrowOpUseX"]
+    return ["BorrowOpMove__x__field:field", "BorrowOpUse__x"]
   }
-  ["BorrowOpBorrowSharedX", "BorrowOpReleaseX", "BorrowOpUseX"]
+  ["BorrowOpBorrowShared__x", "BorrowOpRelease__x", "BorrowOpUse__x"]
 }
 
 ///|
