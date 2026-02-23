@@ -7,8 +7,8 @@ pub enum Kind {
 } derive(Eq, Hash)
 
 ///|
-/// Description: Represents type expressions in the System F-omega style type system.
-/// Example: `let t = Type::arrow(Type::con("Int"), Type::con("Int"))`
+/// Description: Represents type expressions in the System F-omega style type system, including native references with explicit region + mutability metadata.
+/// Example: `let t = Type::ref_type(Region::named("r"), Mutability::shared(), Type::con("Int"))`
 pub enum Type {
   Var(String)
   Con(String)
@@ -27,8 +27,8 @@ pub enum Type {
 } derive(Eq, Hash)
 
 ///|
-/// Description: Represents value-level syntax that can be inferred or checked.
-/// Example: `let tm = Term::lam("x", Type::con("Int"), Term::var_term("x"))`
+/// Description: Represents value-level syntax that can be inferred or checked, including native borrow/move operations (`BorrowShared`, `BorrowMut`, `Deref`, `Assign`, `Move`).
+/// Example: `let tm = Term::borrow_shared(Term::var_term("x"))`
 pub enum Term {
   Var(String)
   Con(String, Type)
@@ -369,7 +369,7 @@ pub enum RegionConstraint {
 } derive(Eq, Hash)
 
 ///|
-/// Description: Borrow checker options scaffold for phased feature rollout.
+/// Description: Borrow-checker analysis options used by native-policy wrappers and explicit borrow-analysis APIs.
 /// Example: `let o = BorrowCheckerOptions::{ enabled: true, use_nll: false, diagnostics: true }`
 pub struct BorrowCheckerOptions {
   enabled : Bool
@@ -403,7 +403,7 @@ pub struct BorrowAnalysisResult {
 }
 
 ///|
-/// Description: Lightweight IR node scaffold for borrow/lifetime analysis.
+/// Description: Lightweight IR node used by borrow/lifetime analysis lowering and rule checking.
 /// Example: `let n = BorrowIrNode::{ id: 0, term: Term::unit(), scope_depth: 0 }`
 pub struct BorrowIrNode {
   id : Int
@@ -412,14 +412,14 @@ pub struct BorrowIrNode {
 }
 
 ///|
-/// Description: Linearized IR scaffold consumed by region/borrow passes.
+/// Description: Linearized IR consumed by region-constraint collection and borrow-rule passes.
 /// Example: `let ir = BorrowIr::{ nodes: [] }`
 pub struct BorrowIr {
   nodes : Array[BorrowIrNode]
 }
 
 ///|
-/// Description: Borrow-oriented type scaffold, kept additive before integrating directly into `Type`.
+/// Description: Borrow-oriented compatibility type used by borrow IR/helpers; native references also exist directly in `Type::Ref`.
 /// Example: `let bt = BorrowType::ref_type(Region::named("r"), Mutability::shared(), Type::con("Int"))`
 pub enum BorrowType {
   Owned(Type)
@@ -427,7 +427,7 @@ pub enum BorrowType {
 } derive(Eq, Hash)
 
 ///|
-/// Description: Borrow-oriented term scaffold, kept additive before integrating directly into `Term`.
+/// Description: Borrow-oriented compatibility term used by borrow IR/helpers; native borrow operations also exist directly in `Term`.
 /// Example: `let bt = BorrowTerm::borrow_shared(Place::{ root: "x", projections: [] })`
 pub enum BorrowTerm {
   BorrowShared(Place)
@@ -463,7 +463,7 @@ pub struct BorrowErrorPayload {
 }
 
 ///|
-/// Description: Error variants produced by kinding, typing, unification, and imports.
+/// Description: Error variants produced by kinding, typing, unification, imports, and borrow/lifetime analysis.
 /// Example: `let e : TypingError = Unbound("x")`
 pub suberror TypingError {
   TypeMismatch(Type, Type)
@@ -474,7 +474,6 @@ pub suberror TypingError {
   NotAVariant(Type)
   InvalidVariantLabel(Type, String)
   MissingCase(String)
-  ExtraCase(String)
   NotATuple(Type)
   TupleIndexOutOfBounds(Type, Int)
   NotARecord(Type)

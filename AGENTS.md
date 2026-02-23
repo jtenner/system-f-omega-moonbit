@@ -8,6 +8,9 @@ System F-omega style typechecker with:
 - polymorphism (`Forall`, `BoundedForall`)
 - records, variants, tuples
 - recursive types (`Mu`) + fold/unfold
+- native borrow/reference terms and types (`Ref`, `borrow_shared`,
+  `borrow_mut`, `deref`, `assign`, `move`)
+- region/lifetime constraint solving + borrow conflict checking
 - trait dictionaries and bounded polymorphism
 - module-level import/rename/dependency analysis helpers
 
@@ -18,19 +21,41 @@ You can browse/install extra skills here:
 
 - Root package sources:
   - `types.mbt`: core data model (`Kind`, `Type`, `Term`, `Pattern`, context,
-    bindings, errors)
-  - `typechecker.mbt`: almost all algorithmic logic and constructors
-  - `show.mbt`: placeholder `Show` impls for `Type`/`Term`/`Pattern`
-  - `sfo_mnb.mbt`: package entry placeholder
-- Root test suites (whitebox):
+    bindings, borrow/lifetime data structures, errors)
+  - `typechecker.mbt`: type/kind inference+checking, unification, normalization,
+    trait logic, import/rename/free-name analysis, and native borrow typing rules
+  - `borrow_scaffold.mbt`: borrow IR lowering, place extraction, region
+    constraints, and borrow analysis orchestration APIs
+  - `show.mbt`: `Show`/`Debug`/pretty-print rendering for core syntax trees
+  - `sfo_mnb.mbt`: package entry notes for this single-package library
+- Root docs:
+  - `README.mbt.md` (package readme used by MoonBit metadata)
+  - `README.md` (copy kept in repo root)
+- Root test helpers:
   - `test_support_wbtest.mbt`
-  - `typechecker_core_wbtest.mbt`
-  - `typechecker_kind_pattern_wbtest.mbt`
-  - `typechecker_infer_check_wbtest.mbt`
-  - `typechecker_traits_wbtest.mbt`
-  - `typechecker_env_import_wbtest.mbt`
-- Command package:
-  - `cmd/main/main.mbt` (template executable)
+  - `borrow_test_support_wbtest.mbt`
+- Root test suites (whitebox):
+  - Core/type-system suites:
+    `typechecker_core_wbtest.mbt`, `typechecker_kind_pattern_wbtest.mbt`,
+    `typechecker_infer_check_wbtest.mbt`, `typechecker_traits_wbtest.mbt`,
+    `typechecker_env_import_wbtest.mbt`, `typechecker_roundout_wbtest.mbt`
+  - Error/coverage suites:
+    `typechecker_error_paths_wbtest.mbt`,
+    `typechecker_error_branches2_wbtest.mbt`,
+    `typechecker_error_coverage3_wbtest.mbt`,
+    `typechecker_coverage_boost_wbtest.mbt`
+  - Borrow/lifetime suites: all `typechecker_borrow_*_wbtest.mbt` files,
+    including matrix suites such as
+    `typechecker_borrow_feature_mountain_red_wbtest.mbt`
+  - README parity suites:
+    `readme_examples_wbtest.mbt`,
+    `typechecker_readme_quickstart_wbtest.mbt`,
+    `typechecker_readme_cookbook_wbtest.mbt`,
+    `typechecker_readme_borrow_errors_wbtest.mbt`
+- Other top-level tests:
+  - `sanity_wbtest.mbt`
+  - `sfo_mnb_wbtest.mbt`
+  - `sfo_mnb_test.mbt`
 
 MoonBit package conventions still apply: `moon.pkg` per package, `_test.mbt` for
 blackbox tests, `_wbtest.mbt` for whitebox tests.
@@ -47,12 +72,28 @@ blackbox tests, `_wbtest.mbt` for whitebox tests.
 
 ### Data model
 
-- `Kind`: `Star` or `Arrow(Kind, Kind)`.
-- `Type`: includes rigid vars/constructors, evars, arrows, polymorphism, type
-  lambdas/apps, records/variants, recursive `Mu`, tuples.
-- `Term`: value-level language with typed lambdas/apps, type apps, trait
-  dictionaries and accessors, pattern matching, fold/unfold.
-- `Pattern`: variable/wildcard/constructor/record/variant/tuple patterns.
+- Core syntax:
+  - `Kind`: `Star` or `Arrow(Kind, Kind)`.
+  - `Type`: includes rigid vars/constructors, evars, arrows, native refs
+    (`Ref(Region, Mutability, Type)`), polymorphism, type lambdas/apps,
+    records/variants, recursive `Mu`, tuples.
+  - `Term`: includes typed lambdas/apps, type apps, native borrow operations
+    (`BorrowShared`, `BorrowMut`, `Deref`, `Assign`, `Move`), trait dictionaries,
+    pattern matching, fold/unfold, tuples.
+  - `Pattern`: variable/wildcard/constructor/record/variant/tuple patterns.
+- Borrow/lifetime model:
+  - `Mutability`, `Region`, `PlaceProjection`, `Place`, `LoanId`, `Loan`.
+  - `RegionConstraint` (`Outlives`, `Equal`, `Placeholder`).
+  - `BorrowCheckerOptions`, `RegionSolution`, `BorrowFacts`,
+    `BorrowAnalysisResult`.
+  - `BorrowIrNode`, `BorrowIr` (lowered IR for borrow analysis).
+  - Compatibility layers: `BorrowType` and `BorrowTerm`.
+  - Diagnostics: `BorrowConflictPayload`, `BorrowErrorPayload`.
+  - Borrow-related `TypingError` variants include:
+    `UseAfterMove`, `MovedValueBorrow`, `BorrowConflict`,
+    `MutateWhileBorrowed`, `AssignToImmutable`, `BorrowOutlivesOwner`,
+    `DanglingReferenceEscape`, `InvalidBorrowTarget`,
+    `RegionConstraintUnsatisfied`.
 
 ### State and environments
 
@@ -63,6 +104,8 @@ blackbox tests, `_wbtest.mbt` for whitebox tests.
   - solved `solutions` (`evar -> type`)
 - `Context` is an ordered binding stack:
   `Term`, `Type`, `TraitDef`, `TraitImpl`, `Dict`, `TypeAlias`, `Enum`.
+- Borrow/lifetime analysis outputs are returned explicitly as
+  `BorrowAnalysisResult` (not persisted in `TypeCheckerState`).
 
 ### Core pipeline
 
@@ -73,6 +116,17 @@ blackbox tests, `_wbtest.mbt` for whitebox tests.
 - `unify_types` + `solve_constraints` drives constraint solving.
 - `normalize_type` expands aliases/enums, performs type-level beta-reduction,
   resolves solved evars.
+- Native borrow policy is integrated into inference/checking paths; terms that
+  contain native borrow syntax trigger borrow/lifetime analysis.
+- Borrow/lifetime pipeline:
+  - `lower_to_borrow_ir`
+  - `collect_region_constraints_from_ir`
+  - `solve_region_constraints_ir`
+  - `check_borrow_rules_ir`
+  - state wrappers:
+    `collect_region_constraints`, `solve_region_constraints`,
+    `check_borrow_rules`, `analyze_borrows`,
+    `infer_type_with_borrow_analysis`, `check_type_with_borrow_analysis`
 
 ### Notable subsystems
 
@@ -81,6 +135,13 @@ blackbox tests, `_wbtest.mbt` for whitebox tests.
   - `add_trait_def`, `add_trait_impl`, `add_dict`
   - `check_trait_implementation`, `check_trait_constraints`
   - term forms `TraitLam`, `TraitApp`, `TraitMethod`
+- Borrow/lifetimes:
+  - place extraction: `borrow_place_from_term`
+  - IR + region constraints: `lower_to_borrow_ir`,
+    `collect_region_constraints_from_ir`
+  - region solve + rule checks: `solve_region_constraints_ir`,
+    `check_borrow_rules_ir`
+  - top-level orchestration: `analyze_borrows`
 - Import/deps:
   - `collect_dependencies` (DFS + cycle detection)
   - `import_module` (dependency closure, topo order, aliasing, conflict policy)
@@ -95,30 +156,57 @@ blackbox tests, `_wbtest.mbt` for whitebox tests.
 - Substitution must respect binders (`Forall`, `BoundedForall`, `Lam`, `Mu`,
   `TyLam`, trait type vars).
 - `normalize_type` is used before many equality/unification decisions.
+- Borrow targets for native operations must be valid place expressions
+  (var/con/project/tuple-project/deref-shaped places).
+- Borrow conflict detection uses prefix-overlap on `Place` projections:
+  parent/child places alias for conflict checks.
+- Mutable borrows conflict with any overlapping active loan; shared borrows
+  conflict with overlapping mutable loans.
+- Moved places are tracked by canonical place keys; assignment to a place
+  reinitializes that place and its sub-places.
+- Region solve returns `Err(RegionConstraintUnsatisfied(...))` if unresolved
+  placeholder constraints remain.
 - Dictionary-related operations depend on both `TraitImpl` bindings and `Dict`
   bindings (for context-level resolution APIs).
 
 ## Test Plan and Coverage
 
-Current whitebox suite covers all major moving parts with 98 tests:
+Current test suite contains 766 tests (whitebox + blackbox) with strong borrow
+and error-path coverage.
 
-1. `typechecker_core_wbtest.mbt`:
-   core equalities, substitution, meta solving, spine helpers, instantiation,
-   misc utilities.
-2. `typechecker_kind_pattern_wbtest.mbt`:
-   kind checking, type/kind unification, constraints, pattern checking,
-   exhaustiveness.
-3. `typechecker_infer_check_wbtest.mbt`:
-   term inference/checking across lambdas/apps/records/tuples/variants/match/
-   fold-unfold + inference modes.
-4. `typechecker_traits_wbtest.mbt`:
-   trait definitions, dictionaries, impl lookup, bounded trait application,
-   auto-instantiation.
-5. `typechecker_env_import_wbtest.mbt`:
-   add_* APIs, normalization for aliases/enums, dependency cycles, import
-   aliasing/conflicts, rename/free-name/context helpers.
+1. Core typechecker suites:
+   `typechecker_core_wbtest.mbt`,
+   `typechecker_kind_pattern_wbtest.mbt`,
+   `typechecker_infer_check_wbtest.mbt`,
+   `typechecker_traits_wbtest.mbt`,
+   `typechecker_env_import_wbtest.mbt`,
+   `typechecker_roundout_wbtest.mbt`.
+2. Borrow/lifetime functional suites:
+   `typechecker_borrow_core_wbtest.mbt`,
+   `typechecker_borrow_native_wbtest.mbt`,
+   `typechecker_borrow_infer_check_wbtest.mbt`,
+   `typechecker_borrow_regions_wbtest.mbt`,
+   `typechecker_borrow_traits_wbtest.mbt`,
+   `typechecker_borrow_payload_wbtest.mbt`,
+   plus borrow-edge and error-path suites.
+3. Borrow/lifetime matrix/stress suites:
+   `typechecker_borrow_feature_red_wbtest.mbt`,
+   `typechecker_borrow_feature_mountain_red_wbtest.mbt`,
+   `typechecker_borrow_spec_matrix_wbtest.mbt`,
+   `typechecker_borrow_negative_error_matrix_wbtest.mbt`.
+4. Error/coverage suites:
+   `typechecker_error_paths_wbtest.mbt`,
+   `typechecker_error_branches2_wbtest.mbt`,
+   `typechecker_error_coverage3_wbtest.mbt`,
+   `typechecker_coverage_boost_wbtest.mbt`.
+5. README parity + examples:
+   `readme_examples_wbtest.mbt`,
+   `typechecker_readme_quickstart_wbtest.mbt`,
+   `typechecker_readme_cookbook_wbtest.mbt`,
+   `typechecker_readme_borrow_errors_wbtest.mbt`.
 
-`test_support_wbtest.mbt` provides reusable setup and result-unwrapping helpers.
+`test_support_wbtest.mbt` and `borrow_test_support_wbtest.mbt` provide reusable
+setup and result-unwrapping helpers.
 
 ## Tooling and Commands
 
@@ -130,24 +218,31 @@ Current whitebox suite covers all major moving parts with 98 tests:
 - Run tests for library package:
   - `/home/jtenner/.moon/bin/moon test --package jtenner/sfo`
 
-Note: running `moon test` for the whole workspace may include `cmd/main` test
-targets and can fail independently of library tests; use the package-scoped
-command above for typechecker validation.
+Note: running `moon test` for the whole workspace may include other targets and
+can fail independently of library tests; use the package-scoped command above
+for typechecker validation.
 
 ## Practical Testing Notes
 
-- `Type`/`Term`/`Pattern` `Show` impls are placeholders in `show.mbt`; prefer
-  structural assertions over string rendering.
-- For error-path checks, prefer pattern matching on `Err(...)` variants.
+- `Kind`, `Type`, `Term`, and `Pattern` implement `Show`; `assert_eq` on those
+  values is fine.
+- For semantic checks, prefer structural assertions/pattern matching over
+  snapshots unless output formatting is the behavior under test.
+- For error-path checks, prefer matching on explicit `Err(...)` variants.
+- For borrow diagnostics, prefer checking structured payloads
+  (`TypingError::borrow_payload`) instead of brittle string matching.
 
 ## Maintenance Workflow
 
 When changing semantics or APIs:
 
-1. Update implementation in `typechecker.mbt` (and `types.mbt` if required).
+1. Update implementation in `typechecker.mbt` / `borrow_scaffold.mbt`
+   (and `types.mbt` if required).
 2. Add/update tests in subsystem-specific `_wbtest.mbt` files.
 3. Run:
    - `/home/jtenner/.moon/bin/moon test --package jtenner/sfo`
    - `/home/jtenner/.moon/bin/moon info`
    - `/home/jtenner/.moon/bin/moon fmt`
 4. Review `.mbti` diffs to confirm intended API surface changes.
+5. If behavior visible in docs changed, update README snippets and matching
+   README parity tests.

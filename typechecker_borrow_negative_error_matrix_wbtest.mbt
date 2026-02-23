@@ -50,12 +50,12 @@ test "collect_region_constraints_from_ir accepts empty and lowered semantic erro
 
 ///|
 test "solve_region_constraints handles unresolved placeholders and structural constraints" {
-  let unresolved = solve_region_constraints_placeholder([
+  let unresolved = solve_region_constraints_ir([
     RegionConstraint::placeholder("placeholder.alpha"),
   ])
   assert_true(unresolved is Err(RegionConstraintUnsatisfied(_)))
 
-  let solved = solve_region_constraints_placeholder([
+  let solved = solve_region_constraints_ir([
     RegionConstraint::outlives(Region::named("a"), Region::named("b")),
     RegionConstraint::outlives(Region::named("b"), Region::named("c")),
   ])
@@ -74,13 +74,13 @@ test "solve_region_constraints handles unresolved placeholders and structural co
 }
 
 ///|
-test "check_borrow_rules_placeholder keeps ordinary constructors inert" {
+test "check_borrow_rules_ir keeps ordinary constructors inert" {
   let lowered = match
     lower_to_borrow_ir(ordinary_constructor_term("OrdinaryConstructorNoBorrow")) {
     Ok(ir) => ir
     Err(_) => panic()
   }
-  let result = check_borrow_rules_placeholder(
+  let result = check_borrow_rules_ir(
     lowered,
     RegionSolution::empty(),
     BorrowCheckerOptions::default(),

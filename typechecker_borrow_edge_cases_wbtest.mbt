@@ -679,8 +679,8 @@ test "RED: collect_region_constraints_from_ir adds polymorphic boundary owner ed
 }
 
 ///|
-test "check_borrow_rules_placeholder accepts arbitrary IR nodes" {
-  let result = check_borrow_rules_placeholder(
+test "check_borrow_rules_ir accepts arbitrary IR nodes" {
+  let result = check_borrow_rules_ir(
     ir_with_two_nodes(
       ordinary_constructor_term("ArbitraryConstructorA"),
       ordinary_constructor_term("ArbitraryConstructorB"),
@@ -692,7 +692,7 @@ test "check_borrow_rules_placeholder accepts arbitrary IR nodes" {
 }
 
 ///|
-test "RED: check_borrow_rules_placeholder enforces owner outlives edges from solved graph" {
+test "RED: check_borrow_rules_ir enforces owner outlives edges from solved graph" {
   let ir = BorrowIr::{
     nodes: [
       BorrowIrNode::{
@@ -703,7 +703,7 @@ test "RED: check_borrow_rules_placeholder enforces owner outlives edges from sol
     ],
   }
 
-  let missing = check_borrow_rules_placeholder(
+  let missing = check_borrow_rules_ir(
     ir,
     RegionSolution::empty(),
     BorrowCheckerOptions::default(),
@@ -720,7 +720,7 @@ test "RED: check_borrow_rules_placeholder enforces owner outlives edges from sol
     outlives: Map::from_array([(Region::named("owner::x"), owner_outlives)]),
     unresolved: [],
   }
-  let allowed = check_borrow_rules_placeholder(
+  let allowed = check_borrow_rules_ir(
     ir,
     solved,
     BorrowCheckerOptions::default(),
@@ -729,7 +729,7 @@ test "RED: check_borrow_rules_placeholder enforces owner outlives edges from sol
 }
 
 ///|
-test "RED: check_borrow_rules_placeholder should release loans at lexical scope exit without explicit release ops" {
+test "RED: check_borrow_rules_ir should release loans at lexical scope exit without explicit release ops" {
   let ir = BorrowIr::{
     nodes: [
       BorrowIrNode::{
@@ -753,7 +753,7 @@ test "RED: check_borrow_rules_placeholder should release loans at lexical scope 
     unresolved: [],
   }
 
-  let result = check_borrow_rules_placeholder(
+  let result = check_borrow_rules_ir(
     ir,
     solved,
     BorrowCheckerOptions::default(),
@@ -1237,12 +1237,12 @@ test "collect_region_constraints_from_ir handles unrecognized-first-node IR" {
 }
 
 ///|
-test "check_borrow_rules_placeholder handles unrecognized-first-node IR" {
+test "check_borrow_rules_ir handles unrecognized-first-node IR" {
   let ir = ir_with_two_nodes(
     Term::unit(),
     ordinary_constructor_term("AnotherUnrecognizedConstructor"),
   )
-  let result = check_borrow_rules_placeholder(
+  let result = check_borrow_rules_ir(
     ir,
     RegionSolution::empty(),
     BorrowCheckerOptions::default(),
@@ -1252,7 +1252,7 @@ test "check_borrow_rules_placeholder handles unrecognized-first-node IR" {
 
 ///|
 test "solve_region_constraints treats placeholder constraints as generic unsatisfied constraints" {
-  let result = solve_region_constraints_placeholder([
+  let result = solve_region_constraints_ir([
     RegionConstraint::placeholder("placeholder.constraint.unsatisfied"),
     RegionConstraint::placeholder("placeholder.constraint.dangling"),
     RegionConstraint::placeholder("placeholder.constraint.outlives"),
@@ -1270,7 +1270,7 @@ test "solve_region_constraints treats placeholder constraints as generic unsatis
 
 ///|
 test "solve_region_constraints reports unsatisfied placeholder and solves structural edges" {
-  let unmatched = solve_region_constraints_placeholder([
+  let unmatched = solve_region_constraints_ir([
     RegionConstraint::placeholder("__unknown_region_probe"),
   ])
   assert_true(
@@ -1278,7 +1278,7 @@ test "solve_region_constraints reports unsatisfied placeholder and solves struct
     "RegionConstraintUnsatisfied",
   )
 
-  let structural = solve_region_constraints_placeholder([
+  let structural = solve_region_constraints_ir([
     RegionConstraint::outlives(Region::named("a"), Region::named("b")),
   ])
   assert_true(structural is Ok(_))
@@ -1296,14 +1296,14 @@ test "solve_region_constraints reports unsatisfied placeholder and solves struct
 }
 
 ///|
-test "RED: check_borrow_rules_placeholder reports unresolved solved constraints when enabled" {
+test "RED: check_borrow_rules_ir reports unresolved solved constraints when enabled" {
   let solved = RegionSolution::{
     outlives: Map::from_array([(Region::named("a"), Set::new())]),
     unresolved: [RegionConstraint::placeholder("x")],
   }
 
   let enabled_opts = BorrowCheckerOptions::default()
-  let result = check_borrow_rules_placeholder(
+  let result = check_borrow_rules_ir(
     ir_with_two_nodes(
       ordinary_constructor_term("UnresolvedSolvedConstraintNodeA"),
       ordinary_constructor_term("UnresolvedSolvedConstraintNodeB"),
@@ -1321,14 +1321,14 @@ test "RED: check_borrow_rules_placeholder reports unresolved solved constraints 
 }
 
 ///|
-test "disabled check_borrow_rules_placeholder remains no-op for unresolved solved constraints" {
+test "disabled check_borrow_rules_ir remains no-op for unresolved solved constraints" {
   let solved = RegionSolution::{
     outlives: Map::from_array([(Region::named("a"), Set::new())]),
     unresolved: [RegionConstraint::placeholder("x")],
   }
 
   let disabled_opts = BorrowCheckerOptions::disabled()
-  let result = check_borrow_rules_placeholder(
+  let result = check_borrow_rules_ir(
     ir_with_two_nodes(
       ordinary_constructor_term("DisabledUnresolvedNodeA"),
       ordinary_constructor_term("DisabledUnresolvedNodeB"),
@@ -1521,7 +1521,7 @@ test "RED: outlives-owner payload includes projected place path" {
     ],
   }
 
-  let result = check_borrow_rules_placeholder(
+  let result = check_borrow_rules_ir(
     ir,
     RegionSolution::empty(),
     BorrowCheckerOptions::default(),

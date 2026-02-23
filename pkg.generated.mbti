@@ -13,7 +13,7 @@ pub fn borrow_ir_schema_version() -> Int
 
 pub fn borrow_place_from_term(Term) -> Place?
 
-pub fn check_borrow_rules_placeholder(BorrowIr, RegionSolution, BorrowCheckerOptions) -> Result[BorrowFacts, TypingError]
+pub fn check_borrow_rules_ir(BorrowIr, RegionSolution, BorrowCheckerOptions) -> Result[BorrowFacts, TypingError]
 
 pub fn collect_region_constraints_from_ir(BorrowIr) -> Result[Array[RegionConstraint], TypingError]
 
@@ -29,7 +29,7 @@ pub fn pretty_term(Term) -> String
 
 pub fn pretty_type(Type) -> String
 
-pub fn solve_region_constraints_placeholder(Array[RegionConstraint]) -> Result[RegionSolution, TypingError]
+pub fn solve_region_constraints_ir(Array[RegionConstraint]) -> Result[RegionSolution, TypingError]
 
 pub fn unify_kinds(Kind, Kind) -> Result[Unit, TypingError]
 
@@ -43,7 +43,6 @@ pub suberror TypingError {
   NotAVariant(Type)
   InvalidVariantLabel(Type, String)
   MissingCase(String)
-  ExtraCase(String)
   NotATuple(Type)
   TupleIndexOutOfBounds(Type, Int)
   NotARecord(Type)

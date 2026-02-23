@@ -9,7 +9,6 @@ fn typing_error_kind(error : TypingError) -> String {
     NotAVariant(_) => "NotAVariant"
     InvalidVariantLabel(_, _) => "InvalidVariantLabel"
     MissingCase(_) => "MissingCase"
-    ExtraCase(_) => "ExtraCase"
     NotATuple(_) => "NotATuple"
     TupleIndexOutOfBounds(_, _) => "TupleIndexOutOfBounds"
     NotARecord(_) => "NotARecord"
@@ -265,38 +264,8 @@ fn borrow_feature_term(tag : String) -> Term {
 }
 
 ///|
-fn typing_error_kind_from_ir_result(
-  result : Result[BorrowIr, TypingError],
-) -> String {
-  match result {
-    Err(error) => typing_error_kind(error)
-    Ok(_) => "Ok"
-  }
-}
-
-///|
-fn typing_error_kind_from_constraints_result(
-  result : Result[Array[RegionConstraint], TypingError],
-) -> String {
-  match result {
-    Err(error) => typing_error_kind(error)
-    Ok(_) => "Ok"
-  }
-}
-
-///|
 fn typing_error_kind_from_solution_result(
   result : Result[RegionSolution, TypingError],
-) -> String {
-  match result {
-    Err(error) => typing_error_kind(error)
-    Ok(_) => "Ok"
-  }
-}
-
-///|
-fn typing_error_kind_from_facts_result(
-  result : Result[BorrowFacts, TypingError],
 ) -> String {
   match result {
     Err(error) => typing_error_kind(error)

@@ -1983,8 +1983,8 @@ pub fn collect_region_constraints_from_ir(
 
 ///|
 /// Description: Solves region constraints with equality expansion and transitive closure.
-/// Example: `let _ = solve_region_constraints_placeholder([])`
-pub fn solve_region_constraints_placeholder(
+/// Example: `let _ = solve_region_constraints_ir([])`
+pub fn solve_region_constraints_ir(
   constraints : Array[RegionConstraint],
 ) -> Result[RegionSolution, TypingError] {
   let outlives : Map[Region, Set[Region]] = Map::new()
@@ -2011,8 +2011,8 @@ pub fn solve_region_constraints_placeholder(
 
 ///|
 /// Description: Borrow-rule checker entry point for lowered IR.
-/// Example: `let _ = check_borrow_rules_placeholder(BorrowIr::{ nodes: [] }, RegionSolution::empty(), BorrowCheckerOptions::default())`
-pub fn check_borrow_rules_placeholder(
+/// Example: `let _ = check_borrow_rules_ir(BorrowIr::{ nodes: [] }, RegionSolution::empty(), BorrowCheckerOptions::default())`
+pub fn check_borrow_rules_ir(
   ir : BorrowIr,
   solved : RegionSolution,
   options : BorrowCheckerOptions,
@@ -2229,7 +2229,7 @@ pub fn check_borrow_rules_placeholder(
 }
 
 ///|
-/// Description: Placeholder API for collecting region constraints from a typed term.
+/// Description: API for collecting region constraints from a typed term.
 /// Example: `let _ = TypeCheckerState::fresh().collect_region_constraints(Term::unit(), Type::unit())`
 pub fn TypeCheckerState::collect_region_constraints(
   self : TypeCheckerState,
@@ -2251,18 +2251,18 @@ pub fn TypeCheckerState::collect_region_constraints(
 }
 
 ///|
-/// Description: Placeholder API for solving region constraints.
+/// Description: API for solving region constraints.
 /// Example: `let _ = TypeCheckerState::fresh().solve_region_constraints([])`
 pub fn TypeCheckerState::solve_region_constraints(
   self : TypeCheckerState,
   constraints : Array[RegionConstraint],
 ) -> Result[RegionSolution, TypingError] {
   ignore(self)
-  solve_region_constraints_placeholder(constraints)
+  solve_region_constraints_ir(constraints)
 }
 
 ///|
-/// Description: Placeholder API for borrow-rule checking after region solving.
+/// Description: API for borrow-rule checking after region solving.
 /// Example: `let _ = TypeCheckerState::fresh().check_borrow_rules(Term::unit(), RegionSolution::empty(), BorrowCheckerOptions::default())`
 pub fn TypeCheckerState::check_borrow_rules(
   self : TypeCheckerState,
@@ -2275,11 +2275,11 @@ pub fn TypeCheckerState::check_borrow_rules(
     Ok(ir) => ir
     Err(t) => return Err(t)
   }
-  check_borrow_rules_placeholder(ir, solved, options)
+  check_borrow_rules_ir(ir, solved, options)
 }
 
 ///|
-/// Description: Placeholder orchestration API for borrow + lifetime analysis.
+/// Description: Orchestration API for borrow + lifetime analysis.
 /// Example: `let _ = TypeCheckerState::fresh().analyze_borrows(Term::unit(), Type::unit(), BorrowCheckerOptions::default())`
 pub fn TypeCheckerState::analyze_borrows(
   self : TypeCheckerState,
@@ -2309,7 +2309,7 @@ pub fn TypeCheckerState::analyze_borrows(
 }
 
 ///|
-/// Description: Placeholder wrapper that keeps legacy inference unchanged when disabled.
+/// Description: Wrapper that keeps legacy inference unchanged when disabled.
 /// Example: `let _ = TypeCheckerState::fresh().infer_type_with_borrow_analysis(Term::unit(), BorrowCheckerOptions::disabled())`
 pub fn TypeCheckerState::infer_type_with_borrow_analysis(
   self : TypeCheckerState,
@@ -2337,7 +2337,7 @@ pub fn TypeCheckerState::infer_type_with_borrow_analysis(
 }
 
 ///|
-/// Description: Placeholder wrapper that keeps legacy checking unchanged when disabled.
+/// Description: Wrapper that keeps legacy checking unchanged when disabled.
 /// Example: `let _ = TypeCheckerState::fresh().check_type_with_borrow_analysis(Term::unit(), Type::unit(), BorrowCheckerOptions::disabled())`
 pub fn TypeCheckerState::check_type_with_borrow_analysis(
   self : TypeCheckerState,

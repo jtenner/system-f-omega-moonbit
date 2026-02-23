@@ -170,7 +170,7 @@ test "RED: collect_region_constraints should accept pure terms" {
 
 ///|
 test "RED: solve_region_constraints should solve basic outlives edges" {
-  let result = solve_region_constraints_placeholder([
+  let result = solve_region_constraints_ir([
     RegionConstraint::outlives(Region::named("a"), Region::named("b")),
   ])
   assert_true(result is Ok(_))
@@ -185,7 +185,7 @@ test "RED: solve_region_constraints should solve basic outlives edges" {
 
 ///|
 test "RED: solve_region_constraints should compute transitive outlives" {
-  let result = solve_region_constraints_placeholder([
+  let result = solve_region_constraints_ir([
     RegionConstraint::outlives(Region::named("a"), Region::named("b")),
     RegionConstraint::outlives(Region::named("b"), Region::named("c")),
   ])
