@@ -87,3 +87,56 @@ test "RED: borrow conflict payload includes active and requested place context" 
     None => panic()
   }
 }
+
+///|
+test "RED: direct infer_type borrow conflict keeps payload aligned with analyze_borrows" {
+  let state = TypeCheckerState::fresh()
+  let direct = state.infer_type(
+    Term::let_term(
+      "x",
+      Term::unit(),
+      Term::tuple_project(
+        Term::tuple([
+          Term::borrow_mut(Term::var_term("x")),
+          Term::borrow_shared(Term::var_term("x")),
+          Term::unit(),
+        ]),
+        2,
+      ),
+    ),
+  )
+
+  let error = match direct {
+    Err(error) => error
+    Ok(_) => panic()
+  }
+  let payload = expect_borrow_payload(error)
+
+  assert_true(payload.error_kind == "BorrowConflict")
+  assert_true(payload.operation == Some("borrow"))
+  assert_true(payload.place_path == Some("x"))
+  assert_true(payload.active_loan_place_path == Some("x"))
+  assert_true(payload.requested_place_path == Some("x"))
+}
+
+///|
+test "RED: direct check_type invalid borrow target keeps operation and details payload" {
+  let state = TypeCheckerState::fresh().extend_context([
+    Binding::term("x", Type::con("Int")),
+  ])
+  let direct = state.check_type(
+    Term::deref(Term::var_term("x")),
+    Type::con("Int"),
+  )
+
+  let error = match direct {
+    Err(error) => error
+    Ok(_) => panic()
+  }
+  let payload = expect_borrow_payload(error)
+
+  assert_true(payload.error_kind == "InvalidBorrowTarget")
+  assert_true(payload.operation == Some("deref"))
+  assert_true(payload.details is Some(_))
+  assert_true(payload.place is None)
+}

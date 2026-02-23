@@ -1125,6 +1125,157 @@ pub fn pretty_pattern(pattern : Pattern) -> String {
 }
 
 ///|
+fn mutability_to_ascii(mutability : Mutability) -> String {
+  match mutability {
+    Shared => "shared"
+    Mutable => "mut"
+  }
+}
+
+///|
+fn region_to_ascii(region : Region) -> String {
+  match region {
+    Named(name) => "named:" + name
+    Infer(id) => "infer:" + id.to_string()
+    Static => "static"
+  }
+}
+
+///|
+fn region_constraint_to_ascii(constraint : RegionConstraint) -> String {
+  match constraint {
+    Outlives(left, right) =>
+      region_to_ascii(left) + " :>= " + region_to_ascii(right)
+    Equal(left, right) =>
+      region_to_ascii(left) + " == " + region_to_ascii(right)
+    Placeholder(message) => "placeholder:" + message
+  }
+}
+
+///|
+fn borrow_conflict_payload_to_ascii(conflict : BorrowConflictPayload) -> String {
+  "BorrowConflictPayload(" +
+  "active=" +
+  conflict.active_loan_place.key_path() +
+  ", requested=" +
+  conflict.requested_place.key_path() +
+  ")"
+}
+
+///|
+fn borrow_payload_to_ascii(payload : BorrowErrorPayload) -> String {
+  let parts : Array[String] = ["kind=" + payload.error_kind]
+  match payload.operation {
+    Some(operation) => parts.push("op=" + operation)
+    None => ()
+  }
+  match payload.place {
+    Some(place) => parts.push("place=" + place.key_path())
+    None => ()
+  }
+  match payload.active_loan_place_path {
+    Some(path) => parts.push("active=" + path)
+    None => ()
+  }
+  match payload.requested_place_path {
+    Some(path) => parts.push("requested=" + path)
+    None => ()
+  }
+  match payload.region_constraint {
+    Some(constraint) =>
+      parts.push("constraint=" + region_constraint_to_ascii(constraint))
+    None => ()
+  }
+  match payload.details {
+    Some(details) => parts.push("details=" + details)
+    None => ()
+  }
+  "BorrowErrorPayload(" + parts.join(", ") + ")"
+}
+
+///|
+fn typing_error_to_ascii(error : TypingError) -> String {
+  match error {
+    TypeMismatch(expected, actual) =>
+      "TypeMismatch(expected=" +
+      type_to_ascii(expected, 0) +
+      ", actual=" +
+      type_to_ascii(actual, 0) +
+      ")"
+    KindMismatch(expected, actual) =>
+      "KindMismatch(expected=" +
+      kind_to_ascii(expected, 0) +
+      ", actual=" +
+      kind_to_ascii(actual, 0) +
+      ")"
+    Cyclic(name) => "Cyclic(" + name + ")"
+    Unbound(name) => "Unbound(" + name + ")"
+    NotATypeFunction(ty) => "NotATypeFunction(" + type_to_ascii(ty, 0) + ")"
+    NotAVariant(ty) => "NotAVariant(" + type_to_ascii(ty, 0) + ")"
+    InvalidVariantLabel(ty, label) =>
+      "InvalidVariantLabel(type=" +
+      type_to_ascii(ty, 0) +
+      ", label=" +
+      label +
+      ")"
+    MissingCase(label) => "MissingCase(" + label + ")"
+    NotATuple(ty) => "NotATuple(" + type_to_ascii(ty, 0) + ")"
+    TupleIndexOutOfBounds(ty, index) =>
+      "TupleIndexOutOfBounds(type=" +
+      type_to_ascii(ty, 0) +
+      ", index=" +
+      index.to_string() +
+      ")"
+    NotARecord(ty) => "NotARecord(" + type_to_ascii(ty, 0) + ")"
+    MissingField(ty, label) =>
+      "MissingField(type=" + type_to_ascii(ty, 0) + ", label=" + label + ")"
+    NotAFunction(ty) => "NotAFunction(" + type_to_ascii(ty, 0) + ")"
+    MissingMethod(trait_name, method_name) =>
+      "MissingMethod(trait=" + trait_name + ", method=" + method_name + ")"
+    WrongNumberOfDicts(expected, actual) =>
+      "WrongNumberOfDicts(expected=" +
+      expected.to_string() +
+      ", actual=" +
+      actual.to_string() +
+      ")"
+    MissingTraitImpl(trait_name, ty) =>
+      "MissingTraitImpl(trait=" +
+      trait_name +
+      ", type=" +
+      type_to_ascii(ty, 0) +
+      ")"
+    UseAfterMove(path) => "UseAfterMove(path=" + path + ")"
+    MovedValueBorrow(path) => "MovedValueBorrow(path=" + path + ")"
+    BorrowConflict(active_loan_place, requested_place) =>
+      "BorrowConflict(requested=" +
+      requested_place.key_path() +
+      ", active=" +
+      active_loan_place.key_path() +
+      ")"
+    MutateWhileBorrowed(place) =>
+      "MutateWhileBorrowed(path=" + place.key_path() + ")"
+    AssignToImmutable(place) =>
+      "AssignToImmutable(path=" + place.key_path() + ")"
+    BorrowOutlivesOwner(path) => "BorrowOutlivesOwner(path=" + path + ")"
+    DanglingReferenceEscape(path) =>
+      "DanglingReferenceEscape(path=" + path + ")"
+    InvalidBorrowTarget(details) => "InvalidBorrowTarget(" + details + ")"
+    RegionConstraintUnsatisfied(constraint) =>
+      "RegionConstraintUnsatisfied(" +
+      region_constraint_to_ascii(constraint) +
+      ")"
+    DuplicateBinding(name) => "DuplicateBinding(" + name + ")"
+    CircularImport(module_name, cycle) =>
+      "CircularImport(module=" +
+      module_name +
+      ", cycle=[" +
+      cycle.join(" -> ") +
+      "])"
+    Message(message) => "Message(" + message + ")"
+  }
+}
+
+///|
 pub impl Show for Kind with output(self, logger) {
   logger.write_string(kind_to_ascii(self, 0))
 }
@@ -1142,6 +1293,65 @@ pub impl Show for Term with output(self, logger) {
 ///|
 pub impl Show for Pattern with output(self, logger) {
   logger.write_string(pattern_to_ascii(self))
+}
+
+///|
+pub impl Show for Mutability with output(self, logger) {
+  logger.write_string(mutability_to_ascii(self))
+}
+
+///|
+pub impl Show for Region with output(self, logger) {
+  logger.write_string(region_to_ascii(self))
+}
+
+///|
+pub impl Show for PlaceProjection with output(self, logger) {
+  match self {
+    Field(label) => logger.write_string("field:" + label)
+    TupleIndex(index) => logger.write_string("tuple:" + index.to_string())
+    Deref => logger.write_string("deref")
+  }
+}
+
+///|
+pub impl Show for Place with output(self, logger) {
+  logger.write_string(self.key_path())
+}
+
+///|
+pub impl Show for Loan with output(self, logger) {
+  logger.write_string(
+    "Loan(id=" +
+    self.id.to_string() +
+    ", mut=" +
+    mutability_to_ascii(self.mutability) +
+    ", place=" +
+    self.place.key_path() +
+    ", region=" +
+    region_to_ascii(self.region) +
+    ")",
+  )
+}
+
+///|
+pub impl Show for RegionConstraint with output(self, logger) {
+  logger.write_string(region_constraint_to_ascii(self))
+}
+
+///|
+pub impl Show for BorrowConflictPayload with output(self, logger) {
+  logger.write_string(borrow_conflict_payload_to_ascii(self))
+}
+
+///|
+pub impl Show for BorrowErrorPayload with output(self, logger) {
+  logger.write_string(borrow_payload_to_ascii(self))
+}
+
+///|
+pub impl Show for TypingError with output(self, logger) {
+  logger.write_string(typing_error_to_ascii(self))
 }
 
 ///|
@@ -1429,5 +1639,34 @@ test "show and debug snapshots for pattern constructors" {
   debug_inspect(
     tuple_pattern,
     content="TuplePattern([VarPattern(\"x\"), WildcardPattern])",
+  )
+}
+
+///|
+test "RED SHOW BORROW: place and region constraints render canonical borrow paths" {
+  let place = Place::root("x").field("f").tuple_index(1).deref_place()
+  inspect(place, content="x.f.1.*")
+
+  inspect(
+    RegionConstraint::outlives(Region::named("a"), Region::static_region()),
+    content="named:a :>= static",
+  )
+}
+
+///|
+test "RED SHOW BORROW: borrow payloads and typing errors render actionable context" {
+  let conflict = BorrowConflict(
+    Place::root("x"),
+    Place::root("x").field("field"),
+  )
+  inspect(conflict, content="BorrowConflict(requested=x.field, active=x)")
+
+  let payload = match conflict.borrow_payload() {
+    Some(p) => p
+    None => panic()
+  }
+  inspect(
+    payload,
+    content="BorrowErrorPayload(kind=BorrowConflict, op=borrow, place=x.field, active=x, requested=x.field)",
   )
 }

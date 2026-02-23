@@ -634,8 +634,18 @@ fn places_overlap(left : Place, right : Place) -> Bool {
 
 ///|
 fn place_key(place : Place) -> String {
-  let mut key = place.root
-  for projection in place.projections {
+  place.key_path()
+}
+
+///|
+fn place_from_key_path(path : String) -> Place? {
+  Place::from_key_path(path)
+}
+
+///|
+pub fn Place::key_path(self : Place) -> String {
+  let mut key = self.root
+  for projection in self.projections {
     match projection {
       Field(label) => key = key + "." + label
       TupleIndex(index) => key = key + "." + index.to_string()
@@ -646,7 +656,7 @@ fn place_key(place : Place) -> String {
 }
 
 ///|
-fn place_from_key_path(path : String) -> Place? {
+pub fn Place::from_key_path(path : String) -> Place? {
   if path.is_empty() {
     return None
   }

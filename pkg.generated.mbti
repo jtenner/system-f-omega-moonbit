@@ -65,6 +65,7 @@ pub suberror TypingError {
   Message(String)
 }
 pub fn TypingError::borrow_payload(Self) -> BorrowErrorPayload?
+pub impl Show for TypingError
 
 // Types and methods
 pub struct AutoInstantiated {
@@ -109,6 +110,7 @@ pub struct BorrowConflictPayload {
   requested_place : Place
   requested_place_path : String
 }
+pub impl Show for BorrowConflictPayload
 
 pub struct BorrowErrorPayload {
   error_kind : String
@@ -121,6 +123,7 @@ pub struct BorrowErrorPayload {
   region_constraint : RegionConstraint?
   details : String?
 }
+pub impl Show for BorrowErrorPayload
 
 pub struct BorrowFacts {
   loans : Array[Loan]
@@ -278,6 +281,7 @@ pub struct Loan {
   origin : String
   region : Region
 }
+pub impl Show for Loan
 
 pub struct MetaEnv {
   mut counter : Int
@@ -295,6 +299,7 @@ pub fn Mutability::mutable() -> Self
 pub fn Mutability::shared() -> Self
 pub impl Eq for Mutability
 pub impl Hash for Mutability
+pub impl Show for Mutability
 
 pub enum Pattern {
   VarPattern(String)
@@ -323,8 +328,11 @@ pub struct Place {
 }
 pub fn Place::deref_place(Self) -> Self
 pub fn Place::field(Self, String) -> Self
+pub fn Place::from_key_path(String) -> Self?
+pub fn Place::key_path(Self) -> String
 pub fn Place::root(String) -> Self
 pub fn Place::tuple_index(Self, Int) -> Self
+pub impl Show for Place
 
 pub enum PlaceProjection {
   Field(String)
@@ -336,6 +344,7 @@ pub fn PlaceProjection::field(String) -> Self
 pub fn PlaceProjection::tuple_index(Int) -> Self
 pub impl Eq for PlaceProjection
 pub impl Hash for PlaceProjection
+pub impl Show for PlaceProjection
 
 pub enum Region {
   Named(String)
@@ -347,6 +356,7 @@ pub fn Region::named(String) -> Self
 pub fn Region::static_region() -> Self
 pub impl Eq for Region
 pub impl Hash for Region
+pub impl Show for Region
 
 pub enum RegionConstraint {
   Outlives(Region, Region)
@@ -358,6 +368,7 @@ pub fn RegionConstraint::outlives(Region, Region) -> Self
 pub fn RegionConstraint::placeholder(String) -> Self
 pub impl Eq for RegionConstraint
 pub impl Hash for RegionConstraint
+pub impl Show for RegionConstraint
 
 pub struct RegionSolution {
   outlives : Map[Region, @set.Set[Region]]

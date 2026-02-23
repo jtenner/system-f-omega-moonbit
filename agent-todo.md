@@ -61,17 +61,22 @@
 - [x] Retire probe-only scaffolding (`borrow_probe_term`, `__err_*`-driven scenarios) after equivalent native/semantic coverage is confirmed.
 
 ## Priority P3: Diagnostics and Developer UX
+- P3 status: completed on 2026-02-23; active engineering priority now moves to P4 modularization and maintenance cleanup.
 - [x] Finalize actionable payload formats for all borrow/lifetime errors in `types.mbt` (especially `BorrowConflict`).
 - [x] Add payload assertions in tests for all borrow/lifetime errors (operation, place path, active/conflicting loan context, region constraint).
-- [ ] Implement robust `Show`/pretty rendering for borrow structures and borrow/lifetime errors in `show.mbt`.
-- [ ] Add focused payload regression tests for direct native typing paths (`infer_type`/`check_type` borrow errors) to ensure payload extraction remains aligned outside `analyze_borrows`.
+- [x] Implement robust `Show`/pretty rendering for borrow structures and borrow/lifetime errors in `show.mbt`.
+- [x] Add focused payload regression tests for direct native typing paths (`infer_type`/`check_type` borrow errors) to ensure payload extraction remains aligned outside `analyze_borrows`.
 
 ## Priority P4: Code Organization and Maintenance
 - [ ] Split `borrow_scaffold.mbt` into focused modules (`borrow_ir.mbt`, `region_solver.mbt`, `borrow_checker.mbt`) with no behavior regression.
-- [ ] Regenerate and review `pkg.generated.mbti` after each API-affecting change.
+- [x] Regenerate and review `pkg.generated.mbti` after each API-affecting change.
 - [ ] Keep `/home/jtenner/.moon/bin/moon fmt` and `/home/jtenner/.moon/bin/moon test --package jtenner/sfo` green after each vertical slice.
 - [ ] Remove or consume currently unused borrow test-support helpers (`typing_error_kind_from_ir_result`, `typing_error_kind_from_constraints_result`, `typing_error_kind_from_facts_result`) to keep test runs warning-clean.
-- [ ] Consolidate duplicate place-path formatting/parsing helpers (`place_key` in `borrow_scaffold.mbt` vs `native_place_key_for_typing` in `typechecker.mbt`) to reduce drift risk.
+- [x] Consolidate duplicate place-path formatting/parsing helpers (`place_key` in `borrow_scaffold.mbt` vs `native_place_key_for_typing` in `typechecker.mbt`) to reduce drift risk.
+
+### Follow-up Tasks (Discovered 2026-02-23)
+- [ ] Add parser edge-case regression tests for `Place::from_key_path` (empty token, leading dot, consecutive dots) and document accepted/rejected forms.
+- [ ] Replace stale unused-helper cleanup item with a concrete warning-audit pass (confirm current helper inventory, then remove or consume any *actual* unused helpers reported by compiler warnings).
 
 ## Validation Commands
 - `/home/jtenner/.moon/bin/moon test --package jtenner/sfo`

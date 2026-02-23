@@ -3639,21 +3639,8 @@ fn native_place_from_term_for_typing(term : Term) -> Place? {
 }
 
 ///|
-fn native_place_key_for_typing(place : Place) -> String {
-  let mut key = place.root
-  for projection in place.projections {
-    match projection {
-      Field(label) => key = key + "." + label
-      TupleIndex(index) => key = key + "." + index.to_string()
-      Deref => key = key + ".*"
-    }
-  }
-  key
-}
-
-///|
 fn region_for_native_borrow_place(place : Place) -> Region {
-  Region::named("borrow::" + native_place_key_for_typing(place))
+  Region::named("borrow::" + place.key_path())
 }
 
 ///|

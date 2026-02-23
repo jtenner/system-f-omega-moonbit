@@ -216,7 +216,7 @@ setup and result-unwrapping helpers.
   - `/home/jtenner/.moon/bin/moon info`
   - `/home/jtenner/.moon/bin/moon fmt`
 - Run tests for library package:
-  - `/home/jtenner/.moon/bin/moon test --package jtenner/sfo`
+  - `/home/jtenner/.moon/bin/moon test`
 
 Note: running `moon test` for the whole workspace may include other targets and
 can fail independently of library tests; use the package-scoped command above

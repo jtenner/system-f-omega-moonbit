@@ -22,6 +22,18 @@ fn native_conflicting_borrow_term() -> Term {
 }
 
 ///|
+test "RED NATIVE: Place key_path roundtrips with from_key_path parser" {
+  let place = Place::root("x").field("left").tuple_index(2).deref_place()
+  let path = place.key_path()
+  assert_eq(path, "x.left.2.*")
+
+  match Place::from_key_path(path) {
+    Some(parsed) => assert_eq(parsed.key_path(), path)
+    None => panic()
+  }
+}
+
+///|
 test "RED NATIVE: Type ref constructor should preserve region mutability and inner type" {
   let ref_ty = Type::ref_type(
     Region::named("r"),
