@@ -265,6 +265,7 @@ pub fn Kind::peel_n_params(Self, Int) -> Result[(Array[Self], Self), TypingError
 pub fn Kind::star() -> Self
 pub impl Eq for Kind
 pub impl Hash for Kind
+pub impl Show for Kind
 
 pub struct KindEqConstraint {
   left : Kind

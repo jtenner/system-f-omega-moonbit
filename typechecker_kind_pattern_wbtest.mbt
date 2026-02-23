@@ -9,7 +9,7 @@ test "check_kind strict mode reports unbound type constructor" {
 test "check_kind lenient mode treats unknown constructor as star" {
   let state = TypeCheckerState::fresh()
   let kind = must_kind(state.check_kind(Type::con("Missing"), true))
-  assert_true(kind == Star)
+  assert_eq(kind, Star)
 }
 
 ///|

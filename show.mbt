@@ -1125,6 +1125,11 @@ pub fn pretty_pattern(pattern : Pattern) -> String {
 }
 
 ///|
+pub impl Show for Kind with output(self, logger) {
+  logger.write_string(kind_to_ascii(self, 0))
+}
+
+///|
 pub impl Show for Type with output(self, logger) {
   logger.write_string(type_to_ascii(self, 0))
 }

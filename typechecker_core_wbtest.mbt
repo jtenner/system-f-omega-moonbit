@@ -92,7 +92,7 @@ test "fresh_meta_var registers kind in state" {
   let state = TypeCheckerState::fresh()
   let fv = state.meta.fresh_meta_var(Star)
   let kind = must_kind(state.check_kind(fv, false))
-  assert_true(kind == Star)
+  assert_eq(kind, Star)
 }
 
 ///|

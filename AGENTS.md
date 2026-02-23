@@ -136,8 +136,6 @@ command above for typechecker validation.
 
 ## Practical Testing Notes
 
-- `Kind` does not implement `Show`, so avoid `assert_eq` directly on `Kind`;
-  prefer `assert_true(kind == Star)` style.
 - `Type`/`Term`/`Pattern` `Show` impls are placeholders in `show.mbt`; prefer
   structural assertions over string rendering.
 - For error-path checks, prefer pattern matching on `Err(...)` variants.
