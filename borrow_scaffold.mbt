@@ -952,6 +952,14 @@ fn lower_tuple_projection_tuple_literal_into_ir(
 }
 
 ///|
+fn let_body_alias_call_argument(body : Term, binder_name : String) -> Term? {
+  match body {
+    App(Var(call_name), arg) if call_name == binder_name => Some(arg)
+    _ => None
+  }
+}
+
+///|
 fn lower_tuple_projection_passthrough_let_into_ir(
   tuple_term : Term,
   binder_name : String,
@@ -974,18 +982,30 @@ fn lower_tuple_projection_passthrough_let_into_ir(
     Var(body_name) => body_name == binder_name
     _ => false
   }
+  let alias_call_arg = let_body_alias_call_argument(body, binder_name)
 
   if can_project_through_body {
     cursor = lower_tuple_projection_source_into_ir(
       tuple_value, projected_index, projection_scope_depth, cursor, nodes,
     )
   } else {
-    cursor = lower_term_into_ir(
-      tuple_value,
-      projection_scope_depth + 1,
-      cursor,
-      nodes,
-    )
+    match alias_call_arg {
+      Some(arg) =>
+        cursor = lower_tuple_projection_source_into_ir(
+          Term::app(tuple_value, arg),
+          projected_index,
+          projection_scope_depth,
+          cursor,
+          nodes,
+        )
+      None =>
+        cursor = lower_term_into_ir(
+          tuple_value,
+          projection_scope_depth + 1,
+          cursor,
+          nodes,
+        )
+    }
   }
 
   cursor = lower_term_into_ir(body, projection_scope_depth + 1, cursor, nodes)
@@ -1153,18 +1173,30 @@ fn lower_record_projection_passthrough_let_into_ir(
     Var(body_name) => body_name == binder_name
     _ => false
   }
+  let alias_call_arg = let_body_alias_call_argument(body, binder_name)
 
   if can_project_through_body {
     cursor = lower_record_projection_source_into_ir(
       record_value, selected_label, projection_scope_depth, cursor, nodes,
     )
   } else {
-    cursor = lower_term_into_ir(
-      record_value,
-      projection_scope_depth + 1,
-      cursor,
-      nodes,
-    )
+    match alias_call_arg {
+      Some(arg) =>
+        cursor = lower_record_projection_source_into_ir(
+          Term::app(record_value, arg),
+          selected_label,
+          projection_scope_depth,
+          cursor,
+          nodes,
+        )
+      None =>
+        cursor = lower_term_into_ir(
+          record_value,
+          projection_scope_depth + 1,
+          cursor,
+          nodes,
+        )
+    }
   }
 
   cursor = lower_term_into_ir(body, projection_scope_depth + 1, cursor, nodes)

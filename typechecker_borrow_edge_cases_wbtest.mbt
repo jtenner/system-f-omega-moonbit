@@ -202,6 +202,66 @@ fn function_returned_record_source_term() -> Term {
 }
 
 ///|
+fn let_bound_function_alias_tuple_source_term() -> Term {
+  Term::let_term(
+    "mk_tuple",
+    Term::lam(
+      "_",
+      Type::unit(),
+      Term::tuple([
+        Term::borrow_shared(Term::var_term("x")),
+        Term::borrow_shared(Term::var_term("y")),
+      ]),
+    ),
+    Term::app(Term::var_term("mk_tuple"), Term::unit()),
+  )
+}
+
+///|
+fn let_bound_function_alias_record_source_term() -> Term {
+  Term::let_term(
+    "mk_record",
+    Term::lam(
+      "_",
+      Type::unit(),
+      Term::record([
+        ("left", Term::borrow_shared(Term::var_term("x"))),
+        ("right", Term::borrow_shared(Term::var_term("y"))),
+      ]),
+    ),
+    Term::app(Term::var_term("mk_record"), Term::unit()),
+  )
+}
+
+///|
+fn let_wrapped_match_tuple_source_term() -> Term {
+  Term::let_term("tmp", branch_join_tuple_source_term(), Term::var_term("tmp"))
+}
+
+///|
+fn let_wrapped_match_record_source_term() -> Term {
+  Term::let_term("tmp", branch_join_record_source_term(), Term::var_term("tmp"))
+}
+
+///|
+fn let_wrapped_app_tuple_source_term() -> Term {
+  Term::let_term(
+    "tmp",
+    function_returned_tuple_source_term(),
+    Term::var_term("tmp"),
+  )
+}
+
+///|
+fn let_wrapped_app_record_source_term() -> Term {
+  Term::let_term(
+    "tmp",
+    function_returned_record_source_term(),
+    Term::var_term("tmp"),
+  )
+}
+
+///|
 fn first_borrow_shared_scope_depth_for_var(
   ir : BorrowIr,
   var_name : String,
@@ -777,6 +837,132 @@ test "RED: record-projection lowering keeps selected match-joined field shallowe
 ///|
 test "RED: record-projection lowering keeps selected function-returned field shallower than non-selected field" {
   let term = Term::project(function_returned_record_source_term(), "right")
+  let lowered = lower_to_borrow_ir(term)
+  assert_true(lowered is Ok(_))
+  match lowered {
+    Ok(ir) =>
+      match
+        (
+          first_borrow_shared_scope_depth_for_var(ir, "x"),
+          first_borrow_shared_scope_depth_for_var(ir, "y"),
+        ) {
+        (Some(non_selected_depth), Some(selected_depth)) =>
+          assert_true(selected_depth < non_selected_depth)
+        _ => panic()
+      }
+    _ => panic()
+  }
+}
+
+///|
+test "RED: tuple-projection lowering keeps selected let-bound function-alias app element shallower than non-selected element" {
+  let term = Term::tuple_project(
+    let_bound_function_alias_tuple_source_term(),
+    1,
+  )
+  let lowered = lower_to_borrow_ir(term)
+  assert_true(lowered is Ok(_))
+  match lowered {
+    Ok(ir) =>
+      match
+        (
+          first_borrow_shared_scope_depth_for_var(ir, "x"),
+          first_borrow_shared_scope_depth_for_var(ir, "y"),
+        ) {
+        (Some(non_selected_depth), Some(selected_depth)) =>
+          assert_true(selected_depth < non_selected_depth)
+        _ => panic()
+      }
+    _ => panic()
+  }
+}
+
+///|
+test "RED: record-projection lowering keeps selected let-bound function-alias app field shallower than non-selected field" {
+  let term = Term::project(
+    let_bound_function_alias_record_source_term(),
+    "right",
+  )
+  let lowered = lower_to_borrow_ir(term)
+  assert_true(lowered is Ok(_))
+  match lowered {
+    Ok(ir) =>
+      match
+        (
+          first_borrow_shared_scope_depth_for_var(ir, "x"),
+          first_borrow_shared_scope_depth_for_var(ir, "y"),
+        ) {
+        (Some(non_selected_depth), Some(selected_depth)) =>
+          assert_true(selected_depth < non_selected_depth)
+        _ => panic()
+      }
+    _ => panic()
+  }
+}
+
+///|
+test "RED: tuple-projection lowering keeps selected let-to-match source element shallower than non-selected element" {
+  let term = Term::tuple_project(let_wrapped_match_tuple_source_term(), 1)
+  let lowered = lower_to_borrow_ir(term)
+  assert_true(lowered is Ok(_))
+  match lowered {
+    Ok(ir) =>
+      match
+        (
+          first_borrow_shared_scope_depth_for_var(ir, "x"),
+          first_borrow_shared_scope_depth_for_var(ir, "y"),
+        ) {
+        (Some(non_selected_depth), Some(selected_depth)) =>
+          assert_true(selected_depth < non_selected_depth)
+        _ => panic()
+      }
+    _ => panic()
+  }
+}
+
+///|
+test "RED: record-projection lowering keeps selected let-to-match source field shallower than non-selected field" {
+  let term = Term::project(let_wrapped_match_record_source_term(), "right")
+  let lowered = lower_to_borrow_ir(term)
+  assert_true(lowered is Ok(_))
+  match lowered {
+    Ok(ir) =>
+      match
+        (
+          first_borrow_shared_scope_depth_for_var(ir, "x"),
+          first_borrow_shared_scope_depth_for_var(ir, "y"),
+        ) {
+        (Some(non_selected_depth), Some(selected_depth)) =>
+          assert_true(selected_depth < non_selected_depth)
+        _ => panic()
+      }
+    _ => panic()
+  }
+}
+
+///|
+test "RED: tuple-projection lowering keeps selected let-to-app source element shallower than non-selected element" {
+  let term = Term::tuple_project(let_wrapped_app_tuple_source_term(), 1)
+  let lowered = lower_to_borrow_ir(term)
+  assert_true(lowered is Ok(_))
+  match lowered {
+    Ok(ir) =>
+      match
+        (
+          first_borrow_shared_scope_depth_for_var(ir, "x"),
+          first_borrow_shared_scope_depth_for_var(ir, "y"),
+        ) {
+        (Some(non_selected_depth), Some(selected_depth)) =>
+          assert_true(selected_depth < non_selected_depth)
+        _ => panic()
+      }
+    _ => panic()
+  }
+}
+
+///|
+test "RED: record-projection lowering keeps selected let-to-app source field shallower than non-selected field" {
+  let term = Term::project(let_wrapped_app_record_source_term(), "right")
   let lowered = lower_to_borrow_ir(term)
   assert_true(lowered is Ok(_))
   match lowered {

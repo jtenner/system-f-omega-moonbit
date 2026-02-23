@@ -1,7 +1,7 @@
 # Agent TODO: Remaining Backlog
 
 ## Verified State (2026-02-23)
-- Library tests are green: `/home/jtenner/.moon/bin/moon test --package jtenner/sfo` -> `Total tests: 751, passed: 751, failed: 0`.
+- Library tests are green: `/home/jtenner/.moon/bin/moon test --package jtenner/sfo` -> `Total tests: 757, passed: 757, failed: 0`.
 - Completed items were removed during cleanup. This file tracks only unfinished work.
 
 ## Priority P0: README Beginner Guide and Full-Library Examples
@@ -49,8 +49,10 @@
 - [x] Add IR-level regression assertions for tuple-projection lowering so selected-element vs non-selected-element scope depths remain stable across refactors.
 - [x] Extend tuple-projection passthrough lowering beyond let-identity sources to additional non-literal producers (e.g. match/if-style branch joins and function-returned tuples) without regressing current scope semantics.
 - [x] Add record-projection passthrough lowering for non-literal record sources and IR-level selected-vs-non-selected field depth assertions.
-- [ ] Extend projection passthrough to additional call shapes beyond direct lambda applications (e.g. let-bound function aliases) while keeping conservative fallback for unknown callees.
-- [ ] Add nested-producer regression coverage (`let -> match -> projection`, `let -> app -> projection`) to lock scope-depth and branch-boundary invariants across composed lowering paths.
+- [x] Extend projection passthrough to additional call shapes beyond direct lambda applications (e.g. let-bound function aliases) while keeping conservative fallback for unknown callees.
+- [x] Add nested-producer regression coverage (`let -> match -> projection`, `let -> app -> projection`) to lock scope-depth and branch-boundary invariants across composed lowering paths.
+- [ ] Add explicit conservative-fallback IR-depth regression tests for unknown alias callees (`let f = unknown in f(arg)`) to lock non-passthrough behavior.
+- [ ] Extend alias-call passthrough beyond single-hop `let` bindings (e.g. alias chains and simple eta wrappers) while preserving current conservative fallback policy.
 
 ## Priority P2: Probe Removal and Test Migration
 - P2 status: completed on 2026-02-23 via semantic borrow-program migration in negative/spec/edge-case suites.
