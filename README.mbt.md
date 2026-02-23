@@ -2,7 +2,17 @@
 
 A **System Fω (F-omega)–style typechecker** implemented in **MoonBit**.
 
-This library is for projects that need a typed core calculus with:
+If you are new to this style of typechecker, use this mental model:
+
+1. **Kind**: the “type of a type” (`*`, `k1 -> k2`).
+2. **Type**: expressions like function types, polymorphic types, records, refs, and recursive `Mu`.
+3. **Term**: runtime language nodes (`Lam`, `App`, `Match`, `borrow_mut`, etc.) that the checker assigns types to.
+4. **TypeCheckerState**: the working state used by inference/checking.
+5. **Context + MetaEnv** inside that state:
+   - `Context` is the ordered stack of known bindings (terms, types, traits, enums, dictionaries, aliases).
+   - `MetaEnv` tracks fresh inference variables (`EVar`), their kinds, and solved substitutions.
+
+The library is for projects that need a typed core calculus with:
 - **higher-kinded types** (kinds like `*` and `k1 -> k2`)
 - **type-level functions** (type lambdas/applications)
 - **polymorphism** (`Forall`, plus trait-constrained `BoundedForall`)
@@ -13,22 +23,6 @@ This library is for projects that need a typed core calculus with:
 - **import/dependency helpers** for composing modules and renaming symbols
 
 If you’ve built a compiler or typed DSL before: think “small, explicit core calculus + a stateful environment + a unifier + constraint solving”.
-
----
-
-## The big idea
-
-You work with a `TypeCheckerState`, which contains:
-
-- a **Context** (ordered stack of bindings for terms/types/enums/traits/etc.)
-- a **MetaEnv** (fresh metavariables `EVar`, their kinds, and their solutions)
-
-The checker supports two primary workflows:
-
-1. **Inference (“synthesis”)**: `infer_type(term)` computes the term’s type.
-2. **Checking**: `check_type(term, expected)` verifies a term has a type and may produce substitutions.
-
-Most “builder” APIs return an updated state (`Result[TypeCheckerState, TypingError]`) so you can treat environments as immutable values and pipe them forward.
 
 ---
 
@@ -68,7 +62,7 @@ fn setup_state() -> TypeCheckerState {
   // Add a term binding. If expected type is None, it will be inferred.
   must_state(s3.add_term("one", Term::con("one", Type::con("Int")), None))
 }
-````
+```
 
 **What these builders do:**
 
@@ -113,6 +107,440 @@ fn check_example(state : TypeCheckerState) -> CheckedType {
 5. Handle `TypingError` via pattern matching (much nicer than string-based errors).
 
 ---
+
+## Borrow Checker Quickstart
+
+These snippets are executable and mirrored in `typechecker_readme_quickstart_wbtest.mbt` via helpers in `readme_examples_wbtest.mbt`.
+
+### `Term::borrow_shared`
+
+Accepted:
+
+```moonbit nocheck
+///|
+let accepted = readme_quickstart_borrow_shared_accepted()
+match accepted {
+  Ok(Ref(Named(region), Shared, Con(inner))) => {
+    assert_eq(region, "borrow::x")
+    assert_eq(inner, "Int")
+  }
+  _ => panic()
+}
+```
+
+Rejected:
+
+```moonbit nocheck
+///|
+let rejected = readme_quickstart_borrow_shared_rejected()
+match rejected {
+  Err(InvalidBorrowTarget(message)) => assert_true(message.contains("borrow_shared"))
+  _ => panic()
+}
+```
+
+`borrow_shared` requires a valid place expression (`x`, `x.field`, `deref(p)`, ...). Borrowing a non-place like `()` is rejected.
+
+### `Term::borrow_mut`
+
+Accepted:
+
+```moonbit nocheck
+///|
+let accepted = readme_quickstart_borrow_mut_accepted()
+match accepted {
+  Ok(Ref(Named(region), Mutable, Con(inner))) => {
+    assert_eq(region, "borrow::x")
+    assert_eq(inner, "Int")
+  }
+  _ => panic()
+}
+```
+
+Rejected:
+
+```moonbit nocheck
+///|
+let rejected = readme_quickstart_borrow_mut_rejected()
+assert_true(rejected is Err(BorrowConflict(_, _)))
+```
+
+Conflicting active loans over the same place are rejected.
+
+### `Term::deref`
+
+Accepted:
+
+```moonbit nocheck
+///|
+let accepted = readme_quickstart_deref_accepted()
+match accepted {
+  Ok(Con(name)) => assert_eq(name, "Int")
+  _ => panic()
+}
+```
+
+Rejected:
+
+```moonbit nocheck
+///|
+let rejected = readme_quickstart_deref_rejected()
+match rejected {
+  Err(InvalidBorrowTarget(message)) => assert_true(message.contains("deref"))
+  _ => panic()
+}
+```
+
+`deref` expects a reference type input; dereferencing a non-reference term is rejected.
+
+### `Term::assign`
+
+Accepted:
+
+```moonbit nocheck
+///|
+let accepted = readme_quickstart_assign_accepted()
+match accepted {
+  Ok(Tuple(elements)) => assert_eq(elements.length(), 0) // Unit
+  _ => panic()
+}
+```
+
+Rejected:
+
+```moonbit nocheck
+///|
+let rejected = readme_quickstart_assign_rejected()
+assert_true(rejected is Err(AssignToImmutable(_)))
+```
+
+`assign` requires a mutable reference target. Assigning through a shared reference is rejected.
+
+### `Term::move_term`
+
+Accepted:
+
+```moonbit nocheck
+///|
+let accepted = readme_quickstart_move_term_accepted()
+match accepted {
+  Ok(Con(name)) => assert_eq(name, "Int")
+  _ => panic()
+}
+```
+
+Rejected:
+
+```moonbit nocheck
+///|
+let rejected = readme_quickstart_move_term_rejected()
+assert_true(rejected is Err(MovedValueBorrow(_)))
+```
+
+Moving a value and then borrowing the same place in the same flow is rejected.
+
+---
+
+## Borrow Errors and Fix Patterns
+
+These error/fix snippets are mirrored in `typechecker_readme_borrow_errors_wbtest.mbt`.
+
+### `UseAfterMove`
+
+Failing:
+
+```moonbit nocheck
+///|
+assert_true(readme_borrow_error_use_after_move_failing() is Err(UseAfterMove(_)))
+```
+
+Fix:
+
+```moonbit nocheck
+///|
+assert_true(readme_borrow_error_use_after_move_fix() is Ok(_))
+```
+
+Pattern: reinitialize (or avoid using) a place after moving it.
+
+### `MovedValueBorrow`
+
+Failing:
+
+```moonbit nocheck
+///|
+assert_true(
+  readme_borrow_error_moved_value_borrow_failing() is Err(MovedValueBorrow(_)),
+)
+```
+
+Fix:
+
+```moonbit nocheck
+///|
+assert_true(readme_borrow_error_moved_value_borrow_fix() is Ok(_))
+```
+
+Pattern: do not borrow from a place after moving it.
+
+### `BorrowConflict`
+
+Failing:
+
+```moonbit nocheck
+///|
+assert_true(
+  readme_borrow_error_borrow_conflict_failing() is Err(BorrowConflict(_, _)),
+)
+```
+
+Fix:
+
+```moonbit nocheck
+///|
+assert_true(readme_borrow_error_borrow_conflict_fix() is Ok(_))
+```
+
+Pattern: release or end one overlapping borrow before creating the next conflicting one.
+
+### `MutateWhileBorrowed`
+
+Failing:
+
+```moonbit nocheck
+///|
+assert_true(
+  readme_borrow_error_mutate_while_borrowed_failing() is
+  Err(MutateWhileBorrowed(_)),
+)
+```
+
+Fix:
+
+```moonbit nocheck
+///|
+assert_true(readme_borrow_error_mutate_while_borrowed_fix() is Ok(_))
+```
+
+Pattern: do not mutate places while an overlapping loan is active.
+
+### `AssignToImmutable`
+
+Failing:
+
+```moonbit nocheck
+///|
+assert_true(
+  readme_borrow_error_assign_to_immutable_failing() is Err(AssignToImmutable(_)),
+)
+```
+
+Fix:
+
+```moonbit nocheck
+///|
+assert_true(readme_borrow_error_assign_to_immutable_fix() is Ok(_))
+```
+
+Pattern: assign only through mutable references.
+
+### `BorrowOutlivesOwner`
+
+Failing:
+
+```moonbit nocheck
+///|
+assert_true(
+  readme_borrow_error_borrow_outlives_owner_failing() is
+  Err(BorrowOutlivesOwner(_)),
+)
+```
+
+Fix:
+
+```moonbit nocheck
+///|
+assert_true(readme_borrow_error_borrow_outlives_owner_fix() is Ok(_))
+```
+
+Pattern: ensure borrow regions are constrained to the owner lifetime.
+
+### `DanglingReferenceEscape`
+
+Failing:
+
+```moonbit nocheck
+///|
+assert_true(
+  readme_borrow_error_dangling_reference_escape_failing() is
+  Err(DanglingReferenceEscape(_)),
+)
+```
+
+Fix:
+
+```moonbit nocheck
+///|
+assert_true(readme_borrow_error_dangling_reference_escape_fix() is Ok(_))
+```
+
+Pattern: prevent references from escaping owners they depend on.
+
+### `InvalidBorrowTarget`
+
+Failing:
+
+```moonbit nocheck
+///|
+assert_true(
+  readme_borrow_error_invalid_borrow_target_failing() is
+  Err(InvalidBorrowTarget(_)),
+)
+```
+
+Fix:
+
+```moonbit nocheck
+///|
+assert_true(readme_borrow_error_invalid_borrow_target_fix() is Ok(_))
+```
+
+Pattern: borrow/deref/assign only valid place expressions (`x`, `x.field`, tuple index, deref place).
+
+### `RegionConstraintUnsatisfied`
+
+Failing:
+
+```moonbit nocheck
+///|
+assert_true(
+  readme_borrow_error_region_constraint_unsatisfied_failing() is
+  Err(RegionConstraintUnsatisfied(_)),
+)
+```
+
+Fix:
+
+```moonbit nocheck
+///|
+assert_true(readme_borrow_error_region_constraint_unsatisfied_fix() is Ok(_))
+```
+
+Pattern: add the missing outlives relation or adjust regions so required constraints are satisfiable.
+
+---
+
+## Beginner Cookbook
+
+These cookbook snippets are mirrored in `typechecker_readme_cookbook_wbtest.mbt`.
+
+### Higher-kinded types and kind checking
+
+```moonbit nocheck
+///|
+let result = readme_cookbook_higher_kinded_kind_example()
+match result {
+  Ok((Arrow(Star, Star), Star)) => ()
+  _ => panic()
+}
+```
+
+### Type-level lambdas and type application
+
+```moonbit nocheck
+///|
+let result = readme_cookbook_type_level_lambda_application_example()
+match result {
+  Ok(Arrow(Con(from), Con(to))) => {
+    assert_eq(from, "Int")
+    assert_eq(to, "Int")
+  }
+  _ => panic()
+}
+```
+
+### `Forall` and `BoundedForall`
+
+```moonbit nocheck
+///|
+let result = readme_cookbook_forall_and_bounded_forall_example()
+match result {
+  Ok((Forall(_, _, _), BoundedForall(_, _, _, _))) => ()
+  _ => panic()
+}
+```
+
+### Traits, dictionaries, and bounded polymorphism
+
+```moonbit nocheck
+///|
+let result = readme_cookbook_traits_dictionaries_bounded_poly_example()
+let expected = Type::arrow(
+  Type::con("Int"),
+  Type::arrow(Type::con("Int"), Type::con("Bool")),
+)
+match result {
+  Ok(ty) => assert_true(ty == expected)
+  _ => panic()
+}
+```
+
+### Records, variants, tuples, and pattern matching
+
+```moonbit nocheck
+///|
+let result = readme_cookbook_records_variants_tuples_patterns_example()
+match result {
+  Ok((record_project_ty, tuple_project_ty, match_ty)) => {
+    assert_true(record_project_ty == Type::con("Bool"))
+    assert_true(tuple_project_ty == Type::con("Bool"))
+    assert_true(match_ty == Type::con("Int"))
+  }
+  _ => panic()
+}
+```
+
+### Recursive types (`Mu`) with `fold`/`unfold`
+
+```moonbit nocheck
+///|
+let result = readme_cookbook_recursive_mu_fold_unfold_example()
+match result {
+  Ok((Mu(_, _), Tuple(elements))) => assert_true(elements.length() == 2)
+  _ => panic()
+}
+```
+
+### Module import/dependency helpers and rename APIs
+
+```moonbit nocheck
+///|
+let result = readme_cookbook_import_dependency_rename_example()
+match result {
+  Ok((deps_include_int, imported_has_value, rename_rewrites_free_term)) => {
+    assert_true(deps_include_int)
+    assert_true(imported_has_value)
+    assert_true(rename_rewrites_free_term)
+  }
+  _ => panic()
+}
+```
+
+---
+
+## From Error to Fix
+
+| `TypingError` | Likely Cause | First Debug Step |
+|---|---|---|
+| `TypeMismatch` | Expected and inferred types diverge. | Normalize both sides and inspect branch return types. |
+| `KindMismatch` | Type-level term used at incompatible kind. | Run `check_kind` on each component and compare arities. |
+| `Unbound` | Missing type/term/dictionary binding in context. | Verify `add_type`/`add_term`/`add_dict` setup order. |
+| `BorrowConflict` | Overlapping conflicting loans are active. | Release/shorten one borrow before creating another. |
+| `UseAfterMove` | Place was moved and used again. | Reinitialize place before reuse or remove later use. |
+| `MovedValueBorrow` | Borrow attempted after move. | Borrow before move, or avoid borrowing moved place. |
+| `AssignToImmutable` | Assignment through shared/immutable reference. | Make target a mutable ref before `assign`. |
+| `InvalidBorrowTarget` | Borrow/deref/assign applied to non-place expression. | Restrict operations to place expressions. |
+| `RegionConstraintUnsatisfied` | Required outlives relation missing. | Inspect generated region constraints and add missing edge. |
 
 ## What the language model contains
 

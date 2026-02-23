@@ -1,35 +1,38 @@
 # Agent TODO: Remaining Backlog
 
 ## Verified State (2026-02-23)
-- Library tests are green: `/home/jtenner/.moon/bin/moon test --package jtenner/sfo` -> `Total tests: 690, passed: 690, failed: 0`.
+- Library tests are green: `/home/jtenner/.moon/bin/moon test --package jtenner/sfo` -> `Total tests: 727, passed: 727, failed: 0`.
 - Completed items were removed during cleanup. This file tracks only unfinished work.
 
 ## Priority P0: README Beginner Guide and Full-Library Examples
-- [ ] Rewrite `README.mbt.md` intro for type-theory beginners with a step-by-step mental model: `Kind`, `Type`, `Term`, `TypeCheckerState`, and context/meta state.
-- [ ] Add a "Borrow Checker Quickstart" section with a runnable `Term::borrow_shared` example pair (accepted + rejected) and explanation.
-- [ ] Add a "Borrow Checker Quickstart" section with a runnable `Term::borrow_mut` example pair (accepted + rejected) and explanation.
-- [ ] Add a "Borrow Checker Quickstart" section with a runnable `Term::deref` example pair (accepted + rejected) and explanation.
-- [ ] Add a "Borrow Checker Quickstart" section with a runnable `Term::assign` example pair (accepted + rejected) and explanation.
-- [ ] Add a "Borrow Checker Quickstart" section with a runnable `Term::move_term` example pair (accepted + rejected) and explanation.
-- [ ] Add "Borrow Errors and Fix Patterns" coverage for `UseAfterMove` with minimal failing program and fix.
-- [ ] Add "Borrow Errors and Fix Patterns" coverage for `MovedValueBorrow` with minimal failing program and fix.
-- [ ] Add "Borrow Errors and Fix Patterns" coverage for `BorrowConflict` with minimal failing program and fix.
-- [ ] Add "Borrow Errors and Fix Patterns" coverage for `MutateWhileBorrowed` with minimal failing program and fix.
-- [ ] Add "Borrow Errors and Fix Patterns" coverage for `AssignToImmutable` with minimal failing program and fix.
-- [ ] Add "Borrow Errors and Fix Patterns" coverage for `BorrowOutlivesOwner` with minimal failing program and fix.
-- [ ] Add "Borrow Errors and Fix Patterns" coverage for `DanglingReferenceEscape` with minimal failing program and fix.
-- [ ] Add "Borrow Errors and Fix Patterns" coverage for `InvalidBorrowTarget` with minimal failing program and fix.
-- [ ] Add "Borrow Errors and Fix Patterns" coverage for `RegionConstraintUnsatisfied` with minimal failing program and fix.
-- [ ] Add a beginner cookbook example for higher-kinded types and kind checking.
-- [ ] Add a beginner cookbook example for type-level lambdas and type application.
-- [ ] Add a beginner cookbook example for `Forall` and `BoundedForall`.
-- [ ] Add a beginner cookbook example for traits, dictionaries, and bounded polymorphism.
-- [ ] Add a beginner cookbook example for records, variants, tuples, and pattern matching.
-- [ ] Add a beginner cookbook example for recursive types (`Mu`) with `fold`/`unfold`.
-- [ ] Add a beginner cookbook example for module import/dependency helpers and rename APIs.
-- [ ] Add a compact "From Error to Fix" troubleshooting table mapping common `TypingError` variants to likely causes and first debugging steps.
-- [ ] Create/update whitebox doc-smoke tests for key README snippets so examples remain executable.
-- [ ] Require `/home/jtenner/.moon/bin/moon test --package jtenner/sfo` after README edits and record the result in backlog updates.
+- P0 status: completed on 2026-02-23; active engineering priority now moves to P1 borrow soundness/policy work.
+- [x] Rewrite `README.mbt.md` intro for type-theory beginners with a step-by-step mental model: `Kind`, `Type`, `Term`, `TypeCheckerState`, and context/meta state.
+- [x] Add a "Borrow Checker Quickstart" section with a runnable `Term::borrow_shared` example pair (accepted + rejected) and explanation.
+- [x] Add a "Borrow Checker Quickstart" section with a runnable `Term::borrow_mut` example pair (accepted + rejected) and explanation.
+- [x] Add a "Borrow Checker Quickstart" section with a runnable `Term::deref` example pair (accepted + rejected) and explanation.
+- [x] Add a "Borrow Checker Quickstart" section with a runnable `Term::assign` example pair (accepted + rejected) and explanation.
+- [x] Add a "Borrow Checker Quickstart" section with a runnable `Term::move_term` example pair (accepted + rejected) and explanation.
+- [x] Extend `typechecker_readme_quickstart_wbtest.mbt` doc-smoke coverage for `Term::assign` and `Term::move_term` quickstart snippets once those sections are added.
+- [x] Add "Borrow Errors and Fix Patterns" coverage for `UseAfterMove` with minimal failing program and fix.
+- [x] Add "Borrow Errors and Fix Patterns" coverage for `MovedValueBorrow` with minimal failing program and fix.
+- [x] Add "Borrow Errors and Fix Patterns" coverage for `BorrowConflict` with minimal failing program and fix.
+- [x] Add "Borrow Errors and Fix Patterns" coverage for `MutateWhileBorrowed` with minimal failing program and fix.
+- [x] Add "Borrow Errors and Fix Patterns" coverage for `AssignToImmutable` with minimal failing program and fix.
+- [x] Add "Borrow Errors and Fix Patterns" coverage for `BorrowOutlivesOwner` with minimal failing program and fix.
+- [x] Add "Borrow Errors and Fix Patterns" coverage for `DanglingReferenceEscape` with minimal failing program and fix.
+- [x] Add "Borrow Errors and Fix Patterns" coverage for `InvalidBorrowTarget` with minimal failing program and fix.
+- [x] Add "Borrow Errors and Fix Patterns" coverage for `RegionConstraintUnsatisfied` with minimal failing program and fix.
+- [x] Add a beginner cookbook example for higher-kinded types and kind checking.
+- [x] Add a beginner cookbook example for type-level lambdas and type application.
+- [x] Add a beginner cookbook example for `Forall` and `BoundedForall`.
+- [x] Add a beginner cookbook example for traits, dictionaries, and bounded polymorphism.
+- [x] Add a beginner cookbook example for records, variants, tuples, and pattern matching.
+- [x] Add a beginner cookbook example for recursive types (`Mu`) with `fold`/`unfold`.
+- [x] Add a beginner cookbook example for module import/dependency helpers and rename APIs.
+- [x] Add a compact "From Error to Fix" troubleshooting table mapping common `TypingError` variants to likely causes and first debugging steps.
+- [x] Create/update whitebox doc-smoke tests for key README snippets so examples remain executable.
+- [x] Add doc-smoke assertions for upcoming "Borrow Errors and Fix Patterns" README examples to keep error/fix snippets executable.
+- [x] Require `/home/jtenner/.moon/bin/moon test --package jtenner/sfo` after README edits and record the result in backlog updates.
 
 ## Priority P1: Borrow Soundness and Policy Consolidation
 - [ ] Split `check_type` into explicit core/policy layers so fallback infer paths can reuse native-policy analysis state instead of re-scanning terms in mixed infer/check flows.
