@@ -24,8 +24,14 @@ You can browse/install extra skills here:
     bindings, borrow/lifetime data structures, errors)
   - `typechecker.mbt`: type/kind inference+checking, unification, normalization,
     trait logic, import/rename/free-name analysis, and native borrow typing rules
-  - `borrow_scaffold.mbt`: borrow IR lowering, place extraction, region
-    constraints, and borrow analysis orchestration APIs
+  - `borrow_ir.mbt`: borrow operation parsing, place extraction/key-path helpers,
+    and IR lowering entrypoints
+  - `region_solver.mbt`: region-constraint collection from IR + region solving
+  - `borrow_checker.mbt`: borrow-rule checking over lowered IR and solved regions
+  - `borrow_diagnostics.mbt`: diagnostics helper glue for place-path conversion
+    and invalid-target operation extraction used by borrow payload assembly
+  - `borrow_scaffold.mbt`: borrow analysis orchestration wrappers and shared
+    helper internals used by IR/solver/checker phases
   - `show.mbt`: `Show`/`Debug`/pretty-print rendering for core syntax trees
   - `sfo_mnb.mbt`: package entry notes for this single-package library
 - Root docs:
@@ -171,7 +177,7 @@ blackbox tests, `_wbtest.mbt` for whitebox tests.
 
 ## Test Plan and Coverage
 
-Current test suite contains 766 tests (whitebox + blackbox) with strong borrow
+Current test suite contains 776 tests (whitebox + blackbox) with strong borrow
 and error-path coverage.
 
 1. Core typechecker suites:
@@ -213,6 +219,7 @@ setup and result-unwrapping helpers.
 - Moon binary for this workspace:
   `/home/jtenner/.moon/bin/moon`
 - Format/interface update:
+  - `/home/jtenner/.moon/bin/moon check --package-path . --deny-warn`
   - `/home/jtenner/.moon/bin/moon info`
   - `/home/jtenner/.moon/bin/moon fmt`
 - Run tests for library package:
@@ -240,7 +247,8 @@ When changing semantics or APIs:
    (and `types.mbt` if required).
 2. Add/update tests in subsystem-specific `_wbtest.mbt` files.
 3. Run:
-   - `/home/jtenner/.moon/bin/moon test --package jtenner/sfo`
+   - `/home/jtenner/.moon/bin/moon check --package-path . --deny-warn`
+   - `/home/jtenner/.moon/bin/moon test`
    - `/home/jtenner/.moon/bin/moon info`
    - `/home/jtenner/.moon/bin/moon fmt`
 4. Review `.mbti` diffs to confirm intended API surface changes.

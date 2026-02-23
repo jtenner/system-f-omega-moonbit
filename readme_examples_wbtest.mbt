@@ -116,6 +116,61 @@ fn readme_quickstart_move_term_rejected() -> Result[Type, TypingError] {
 }
 
 ///|
+fn readme_quickstart_tyapp_intrinsic_borrow_shared_example() -> Result[
+  BorrowAnalysisResult,
+  TypingError,
+] {
+  TypeCheckerState::fresh().analyze_borrows(
+    borrow_intrinsic_ops_term([
+      Term::app(
+        Term::tyapp(Term::var_term("borrow_shared"), Type::unit()),
+        Term::var_term("x"),
+      ),
+    ]),
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+}
+
+///|
+fn readme_quickstart_tyapp_intrinsic_conflict_example() -> Result[
+  BorrowAnalysisResult,
+  TypingError,
+] {
+  TypeCheckerState::fresh().analyze_borrows(
+    borrow_intrinsic_ops_term([
+      Term::app(
+        Term::tyapp(Term::var_term("borrow_mut"), Type::unit()),
+        Term::var_term("x"),
+      ),
+      Term::app(
+        Term::tyapp(Term::var_term("borrow_shared"), Type::unit()),
+        Term::var_term("x"),
+      ),
+    ]),
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+}
+
+///|
+fn readme_quickstart_tyapp_intrinsic_deref_example() -> Result[
+  BorrowAnalysisResult,
+  TypingError,
+] {
+  TypeCheckerState::fresh().analyze_borrows(
+    borrow_intrinsic_ops_term([
+      Term::app(
+        Term::tyapp(Term::var_term("deref"), Type::con("Int")),
+        Term::var_term("p"),
+      ),
+    ]),
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+}
+
+///|
 fn readme_analyze_borrow_ops(
   ops : Array[Term],
 ) -> Result[BorrowAnalysisResult, TypingError] {

@@ -34,6 +34,25 @@ test "RED NATIVE: Place key_path roundtrips with from_key_path parser" {
 }
 
 ///|
+test "RED NATIVE: Place from_key_path rejects empty path segments" {
+  let invalid_paths = [".x", "x.", "x..field", "x...field", "x.*."]
+  for path in invalid_paths {
+    match Place::from_key_path(path) {
+      Some(_) => panic()
+      None => ()
+    }
+  }
+}
+
+///|
+test "RED NATIVE: Place from_key_path accepts explicit deref and tuple segments" {
+  match Place::from_key_path("root.*.3.field") {
+    Some(place) => assert_eq(place.key_path(), "root.*.3.field")
+    None => panic()
+  }
+}
+
+///|
 test "RED NATIVE: Type ref constructor should preserve region mutability and inner type" {
   let ref_ty = Type::ref_type(
     Region::named("r"),
@@ -148,6 +167,46 @@ test "RED NATIVE: infer borrow should accept constructor-form deref place target
   let target = Term::app(deref_builtin, Term::var_term("p"))
   let result = state.infer_type(Term::borrow_shared(target))
   assert_true(result is Ok(_))
+}
+
+///|
+test "RED NATIVE: infer borrow should accept TyApp-wrapped deref intrinsic place targets" {
+  let ptr_type = Type::ref_type(
+    Region::named("ptr_region"),
+    Mutability::shared(),
+    Type::con("Int"),
+  )
+  let deref_poly_type = Type::forall(
+    "A",
+    Star,
+    Type::arrow(
+      Type::ref_type(
+        Region::named("ptr_region"),
+        Mutability::shared(),
+        Type::var_type("A"),
+      ),
+      Type::var_type("A"),
+    ),
+  )
+  let state = TypeCheckerState::fresh().extend_context([
+    Binding::type_binding("Int", Star),
+    Binding::term("p", ptr_type),
+    Binding::term("deref", deref_poly_type),
+  ])
+
+  let target = Term::app(
+    Term::tyapp(Term::var_term("deref"), Type::con("Int")),
+    Term::var_term("p"),
+  )
+  let result = state.infer_type(Term::borrow_shared(target))
+  assert_true(result is Ok(_))
+  match result {
+    Ok(Ref(Named(region), Shared, Con(inner))) => {
+      assert_eq(region, "borrow::p.*")
+      assert_eq(inner, "Int")
+    }
+    _ => panic()
+  }
 }
 
 ///|

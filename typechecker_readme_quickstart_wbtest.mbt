@@ -103,3 +103,23 @@ test "README quickstart move_term rejected example reports MovedValueBorrow" {
 
   assert_true(result is Err(MovedValueBorrow(_)))
 }
+
+///|
+test "README quickstart TyApp intrinsic borrow_shared example succeeds" {
+  let result = readme_quickstart_tyapp_intrinsic_borrow_shared_example()
+  assert_true(typing_error_kind_from_analysis_result(result) == "Ok")
+}
+
+///|
+test "README quickstart TyApp intrinsic borrow_mut then borrow_shared example reports BorrowConflict" {
+  let result = readme_quickstart_tyapp_intrinsic_conflict_example()
+  assert_true(
+    typing_error_kind_from_analysis_result(result) == "BorrowConflict",
+  )
+}
+
+///|
+test "README quickstart TyApp intrinsic deref example succeeds" {
+  let result = readme_quickstart_tyapp_intrinsic_deref_example()
+  assert_true(typing_error_kind_from_analysis_result(result) == "Ok")
+}

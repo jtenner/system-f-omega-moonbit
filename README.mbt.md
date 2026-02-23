@@ -808,8 +808,47 @@ Current semantics:
 * `infer_type_with_borrow_analysis` and `check_type_with_borrow_analysis` still run wrapper analysis for non-native/probe terms, but skip redundant re-analysis for native borrow syntax by threading native-policy flags from core helpers.
 * Core and wrapper gating use the same native-syntax detector (`term_contains_native_borrow_syntax`) to keep policy decisions consistent.
 * Native borrow target validation is canonicalized through `borrow_place_from_term`, which is shared by typing and borrow-IR lowering.
+* Intrinsic-call forms also support type-application wrappers on intrinsic callees (`TyApp`), for example:
+  * `Term::app(Term::tyapp(Term::var_term("borrow_shared"), Type::unit()), Term::var_term("x"))`
+  * `Term::app(Term::tyapp(Term::var_term("borrow_mut"), Type::unit()), Term::var_term("x"))`
+  * `Term::app(Term::tyapp(Term::var_term("deref"), Type::con("Int")), Term::var_term("p"))`
+  These snippets are executable via README helper tests:
+
+```moonbit nocheck
+///|
+assert_true(
+  typing_error_kind_from_analysis_result(
+    readme_quickstart_tyapp_intrinsic_borrow_shared_example(),
+  ) == "Ok",
+)
+
+///|
+assert_true(
+  typing_error_kind_from_analysis_result(
+    readme_quickstart_tyapp_intrinsic_conflict_example(),
+  ) == "BorrowConflict",
+)
+
+///|
+assert_true(
+  typing_error_kind_from_analysis_result(
+    readme_quickstart_tyapp_intrinsic_deref_example(),
+  ) == "Ok",
+)
+```
 * Inferred native references use deterministic region naming: `borrow::<place_key>`.
   * Examples: `x -> borrow::x`, `x.field -> borrow::x.field`, `deref(p) -> borrow::p.*`, `x.0 -> borrow::x.0`.
+* `Place::from_key_path` accepted forms:
+  * `<root>`
+  * `<root>.<field>`
+  * `<root>.<tuple_index>`
+  * `<root>.*`
+  * Any combination of the segments above (for example: `x.field.0.*`).
+* `Place::from_key_path` rejects malformed paths:
+  * empty input (`""`)
+  * leading separators (`.x`)
+  * consecutive separators (`x..field`)
+  * trailing separators (`x.` / `x.*.`)
 * When checking `BorrowShared` / `BorrowMut` against an expected `Ref`, region and mutability must match the inferred native borrow reference; mismatches produce `TypeMismatch`.
 * Match-branch moved-place state now uses a deterministic path-sensitive join (set intersection across sibling branches), so values moved on only one branch are not treated as globally moved after the join.
 * Region probe operations in borrow IR now emit/check structural region constraints instead of relying on sentinel `__err_*` placeholders during runtime analysis.
@@ -1035,7 +1074,7 @@ fn trait_example() -> Result[Type, TypingError] {
 
 ## Tooling
 
-* `moon test --package jtenner/sfo`
+* `moon test`
 * `moon info`
 * `moon fmt`
 

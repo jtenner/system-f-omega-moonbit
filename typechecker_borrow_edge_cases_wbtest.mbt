@@ -583,6 +583,40 @@ test "RED: collect_region_constraints_from_ir emits owner outlives edges for bor
 }
 
 ///|
+test "RED: collect_region_constraints_from_ir emits owner edges for TyApp-wrapped intrinsic borrow operations" {
+  let lowered = lower_to_borrow_ir(
+    Term::app(
+      Term::tyapp(Term::var_term("borrow_shared"), Type::unit()),
+      Term::var_term("x"),
+    ),
+  )
+  assert_true(lowered is Ok(_))
+  let ir = match lowered {
+    Ok(ir) => ir
+    _ => panic()
+  }
+
+  let result = collect_region_constraints_from_ir(ir)
+  assert_true(result is Ok(_))
+  match result {
+    Ok(constraints) => {
+      let mut has_owner_edge = false
+      for constraint in constraints {
+        match constraint {
+          Outlives(Named(owner), Infer(_)) =>
+            if owner == "owner::x" {
+              has_owner_edge = true
+            }
+          _ => ()
+        }
+      }
+      assert_true(has_owner_edge)
+    }
+    _ => panic()
+  }
+}
+
+///|
 test "RED: collect_region_constraints_from_ir adds trait dictionary boundary owner edges" {
   let ir = BorrowIr::{
     nodes: [
@@ -729,6 +763,51 @@ test "RED: check_borrow_rules_ir enforces owner outlives edges from solved graph
 }
 
 ///|
+test "RED: check_borrow_rules_ir reports conflict for TyApp-wrapped intrinsic borrow ops with solved owner edges" {
+  let ir = BorrowIr::{
+    nodes: [
+      BorrowIrNode::{
+        id: 0,
+        term: Term::app(
+          Term::tyapp(Term::var_term("borrow_mut"), Type::unit()),
+          Term::var_term("x"),
+        ),
+        scope_depth: 0,
+      },
+      BorrowIrNode::{
+        id: 1,
+        term: Term::app(
+          Term::tyapp(Term::var_term("borrow_shared"), Type::unit()),
+          Term::var_term("x"),
+        ),
+        scope_depth: 0,
+      },
+    ],
+  }
+  let owner_outlives : Set[Region] = Set::new()
+  owner_outlives.add(Region::infer(0))
+  owner_outlives.add(Region::infer(1))
+  let solved = RegionSolution::{
+    outlives: Map::from_array([(Region::named("owner::x"), owner_outlives)]),
+    unresolved: [],
+  }
+
+  let result = check_borrow_rules_ir(
+    ir,
+    solved,
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(result is Err(BorrowConflict(_, _)))
+  match result {
+    Err(BorrowConflict(active, requested)) => {
+      assert_eq(active.key_path(), "x")
+      assert_eq(requested.key_path(), "x")
+    }
+    _ => panic()
+  }
+}
+
+///|
 test "RED: check_borrow_rules_ir should release loans at lexical scope exit without explicit release ops" {
   let ir = BorrowIr::{
     nodes: [
@@ -759,6 +838,34 @@ test "RED: check_borrow_rules_ir should release loans at lexical scope exit with
     BorrowCheckerOptions::default(),
   )
   assert_true(result is Ok(_))
+}
+
+///|
+test "RED: analyze_borrows should detect conflicts for TyApp-wrapped intrinsic borrow operations" {
+  let state = TypeCheckerState::fresh()
+  let term = Term::tuple_project(
+    Term::tuple([
+      Term::app(
+        Term::tyapp(Term::var_term("borrow_mut"), Type::unit()),
+        Term::var_term("x"),
+      ),
+      Term::app(
+        Term::tyapp(Term::var_term("borrow_shared"), Type::unit()),
+        Term::var_term("x"),
+      ),
+      Term::unit(),
+    ]),
+    2,
+  )
+
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(
+    typing_error_kind_from_analysis_result(result) == "BorrowConflict",
+  )
 }
 
 ///|
