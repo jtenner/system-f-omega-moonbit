@@ -78,6 +78,39 @@ fn infer_check_native_conflict_term() -> Term {
 }
 
 ///|
+fn infer_check_fallback_root_nested_borrow_term() -> Term {
+  Term::tuple_project(
+    Term::tuple([
+      Term::tuple_project(
+        Term::tuple([Term::borrow_shared(Term::var_term("x")), Term::unit()]),
+        1,
+      ),
+      Term::unit(),
+    ]),
+    1,
+  )
+}
+
+///|
+fn infer_check_explicit_root_nested_conflict_term() -> Term {
+  Term::tuple([
+    Term::borrow_mut(Term::var_term("x")),
+    Term::tuple_project(
+      Term::tuple([Term::borrow_shared(Term::var_term("x")), Term::unit()]),
+      1,
+    ),
+  ])
+}
+
+///|
+fn infer_check_nested_fallback_borrow_unit_term() -> Term {
+  Term::tuple_project(
+    Term::tuple([Term::borrow_shared(Term::var_term("x")), Term::unit()]),
+    1,
+  )
+}
+
+///|
 test "infer_type_with_borrow_analysis matches infer_type for native borrow conflicts" {
   let state = TypeCheckerState::fresh()
   let term = infer_check_native_conflict_term()
@@ -217,6 +250,150 @@ test "check native-policy helper returns native flag true when fallback inferenc
   assert_true(result is Ok(_))
   match result {
     Ok((checked, true)) => assert_true(checked.ty == Type::unit())
+    _ => panic()
+  }
+}
+
+///|
+test "check native-policy helper returns native flag true for fallback-rooted nested borrow terms" {
+  let state = TypeCheckerState::fresh().extend_context([
+    Binding::term("x", Type::unit()),
+  ])
+  let term = infer_check_fallback_root_nested_borrow_term()
+  let result = check_type_with_native_policy_flag(state, term, Type::unit())
+  assert_true(result is Ok(_))
+  match result {
+    Ok((checked, true)) => assert_true(checked.ty == Type::unit())
+    _ => panic()
+  }
+}
+
+///|
+test "check native-policy helper keeps native flag false for explicit-check roots with nested fallback borrows" {
+  let state = TypeCheckerState::fresh().extend_context([
+    Binding::term("x", Type::unit()),
+  ])
+  let term = infer_check_explicit_root_nested_conflict_term()
+  let expected = Type::tuple([
+    Type::ref_type(
+      Region::named("borrow::x"),
+      Mutability::mutable(),
+      Type::unit(),
+    ),
+    Type::unit(),
+  ])
+
+  let result = check_type_with_native_policy_flag(state, term, expected)
+  assert_true(result is Ok(_))
+  match result {
+    Ok((checked, false)) => assert_true(checked.ty == expected)
+    _ => panic()
+  }
+}
+
+///|
+test "check_type_with_borrow_analysis still runs native policy for explicit-check roots with nested fallback borrows" {
+  let state = TypeCheckerState::fresh().extend_context([
+    Binding::term("x", Type::unit()),
+  ])
+  let term = infer_check_explicit_root_nested_conflict_term()
+  let expected = Type::tuple([
+    Type::ref_type(
+      Region::named("borrow::x"),
+      Mutability::mutable(),
+      Type::unit(),
+    ),
+    Type::unit(),
+  ])
+
+  let direct = state.check_type(term, expected)
+  assert_true(direct is Ok(_))
+
+  let wrapped = state.check_type_with_borrow_analysis(
+    term,
+    expected,
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(
+    typing_error_kind_from_checked_result(wrapped) == "BorrowConflict",
+  )
+}
+
+///|
+test "check native-policy helper keeps native flag false for Lam explicit-check root with nested fallback borrow" {
+  let state = TypeCheckerState::fresh().extend_context([
+    Binding::term("x", Type::unit()),
+  ])
+  let term = Term::lam(
+    "arg",
+    Type::unit(),
+    infer_check_nested_fallback_borrow_unit_term(),
+  )
+  let expected = Type::arrow(Type::unit(), Type::unit())
+
+  let result = check_type_with_native_policy_flag(state, term, expected)
+  assert_true(result is Ok(_))
+  match result {
+    Ok((checked, false)) => assert_true(checked.ty == expected)
+    _ => panic()
+  }
+}
+
+///|
+test "check native-policy helper keeps native flag false for TyLam explicit-check root with nested fallback borrow" {
+  let state = TypeCheckerState::fresh().extend_context([
+    Binding::term("x", Type::unit()),
+  ])
+  let term = Term::tylam(
+    "A",
+    Star,
+    infer_check_nested_fallback_borrow_unit_term(),
+  )
+  let expected = Type::forall("A", Star, Type::unit())
+
+  let result = check_type_with_native_policy_flag(state, term, expected)
+  assert_true(result is Ok(_))
+  match result {
+    Ok((checked, false)) => assert_true(checked.ty == expected)
+    _ => panic()
+  }
+}
+
+///|
+test "check native-policy helper keeps native flag false for TraitLam explicit-check root with nested fallback borrow" {
+  let state = TypeCheckerState::fresh().extend_context([
+    Binding::term("x", Type::unit()),
+  ])
+  let term = Term::trait_lam(
+    "dict",
+    "Eq",
+    "A",
+    Star,
+    [],
+    infer_check_nested_fallback_borrow_unit_term(),
+  )
+  let expected = Type::bounded_forall("A", Star, [], Type::unit())
+
+  let result = check_type_with_native_policy_flag(state, term, expected)
+  assert_true(result is Ok(_))
+  match result {
+    Ok((checked, false)) => assert_true(checked.ty == expected)
+    _ => panic()
+  }
+}
+
+///|
+test "check native-policy helper keeps native flag false for Move explicit-check root with nested fallback borrow" {
+  let state = TypeCheckerState::fresh().extend_context([
+    Binding::term("x", Type::unit()),
+  ])
+  let term = Term::move_term(infer_check_nested_fallback_borrow_unit_term())
+  let expected = Type::unit()
+
+  let result = check_type_with_native_policy_flag(state, term, expected)
+  assert_true(result is Ok(_))
+  match result {
+    Ok((checked, false)) => assert_true(checked.ty == expected)
     _ => panic()
   }
 }

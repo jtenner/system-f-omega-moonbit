@@ -341,22 +341,6 @@ fn borrow_error_spec_cases() -> Array[(String, String)] {
 }
 
 ///|
-fn borrow_probe_tag_for_error_kind(kind : String) -> String {
-  match kind {
-    "UseAfterMove" => "__err_use_after_move"
-    "MovedValueBorrow" => "__err_moved_value_borrow"
-    "BorrowConflict" => "__err_borrow_conflict"
-    "MutateWhileBorrowed" => "__err_mutate_while_borrowed"
-    "AssignToImmutable" => "__err_assign_to_immutable"
-    "BorrowOutlivesOwner" => "__err_borrow_outlives_owner"
-    "DanglingReferenceEscape" => "__err_dangling_reference_escape"
-    "InvalidBorrowTarget" => "__err_invalid_borrow_target"
-    "RegionConstraintUnsatisfied" => "__err_region_constraint_unsatisfied"
-    _ => "__unknown_probe"
-  }
-}
-
-///|
 test "borrow error spec matrix is large and uniquely identified" {
   let cases = borrow_error_spec_cases()
   assert_true(cases.length() >= 300)
@@ -400,42 +384,37 @@ test "borrow error classifier round-trips every spec case" {
 }
 
 ///|
-test "analyze_borrows treats synthetic spec probes as ordinary terms" {
+test "analyze_borrows matches semantic error kind for every spec case" {
   let state = TypeCheckerState::fresh()
   let options = BorrowCheckerOptions::default()
 
   for c in borrow_error_spec_cases() {
     let (_, expected_kind) = c
-    let tag = borrow_probe_tag_for_error_kind(expected_kind)
-    let result = state.analyze_borrows(
-      borrow_probe_term(tag),
-      Type::unit(),
-      options,
-    )
-    assert_true(typing_error_kind_from_analysis_result(result) == "Ok")
+    let term = borrow_semantic_error_term_for_kind(expected_kind)
+    let result = state.analyze_borrows(term, Type::unit(), options)
+    assert_true(typing_error_kind_from_analysis_result(result) == expected_kind)
   }
 }
 
 ///|
-test "infer/check wrappers treat synthetic spec probes as ordinary terms" {
+test "infer/check wrappers match semantic error kind for every spec case" {
   let state = TypeCheckerState::fresh()
   let options = BorrowCheckerOptions::default()
 
   for c in borrow_error_spec_cases() {
     let (_, expected_kind) = c
-    let tag = borrow_probe_tag_for_error_kind(expected_kind)
-    let term = borrow_probe_term(tag)
+    let term = borrow_semantic_error_term_for_kind(expected_kind)
     assert_true(
       typing_error_kind_from_type_result(
         state.infer_type_with_borrow_analysis(term, options),
       ) ==
-      "Ok",
+      expected_kind,
     )
     assert_true(
       typing_error_kind_from_checked_result(
         state.check_type_with_borrow_analysis(term, Type::unit(), options),
       ) ==
-      "Ok",
+      expected_kind,
     )
   }
 }

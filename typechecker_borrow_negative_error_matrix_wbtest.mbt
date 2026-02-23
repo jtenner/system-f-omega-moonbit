@@ -1,15 +1,9 @@
 ///|
-fn borrow_probe_error_cases() -> Array[(String, String)] {
+fn borrow_semantic_error_kinds() -> Array[String] {
   [
-    ("__err_invalid_borrow_target", "InvalidBorrowTarget"),
-    ("__err_borrow_outlives_owner", "BorrowOutlivesOwner"),
-    ("__err_dangling_reference_escape", "DanglingReferenceEscape"),
-    ("__err_region_constraint_unsatisfied", "RegionConstraintUnsatisfied"),
-    ("__err_use_after_move", "UseAfterMove"),
-    ("__err_moved_value_borrow", "MovedValueBorrow"),
-    ("__err_borrow_conflict", "BorrowConflict"),
-    ("__err_mutate_while_borrowed", "MutateWhileBorrowed"),
-    ("__err_assign_to_immutable", "AssignToImmutable"),
+    "InvalidBorrowTarget", "BorrowOutlivesOwner", "DanglingReferenceEscape", "RegionConstraintUnsatisfied",
+    "UseAfterMove", "MovedValueBorrow", "BorrowConflict", "MutateWhileBorrowed",
+    "AssignToImmutable",
   ]
 }
 
@@ -29,24 +23,23 @@ fn negative_matrix_has_outlives_edge(
 }
 
 ///|
-test "lower_to_borrow_ir accepts all synthetic probe terms as ordinary constructors" {
-  for c in borrow_probe_error_cases() {
-    let (tag, _) = c
-    let result = lower_to_borrow_ir(borrow_probe_term(tag))
+test "lower_to_borrow_ir accepts all semantic borrow error programs" {
+  for kind in borrow_semantic_error_kinds() {
+    let result = lower_to_borrow_ir(borrow_semantic_error_term_for_kind(kind))
     assert_true(result is Ok(_))
   }
 }
 
 ///|
-test "collect_region_constraints_from_ir accepts empty and lowered probe IR" {
+test "collect_region_constraints_from_ir accepts empty and lowered semantic error IR" {
   let empty_ir_result = collect_region_constraints_from_ir(BorrowIr::{
     nodes: [],
   })
   assert_true(empty_ir_result is Ok(_))
 
-  for c in borrow_probe_error_cases() {
-    let (tag, _) = c
-    let lowered = match lower_to_borrow_ir(borrow_probe_term(tag)) {
+  for kind in borrow_semantic_error_kinds() {
+    let lowered = match
+      lower_to_borrow_ir(borrow_semantic_error_term_for_kind(kind)) {
       Ok(ir) => ir
       Err(_) => panic()
     }
@@ -56,24 +49,11 @@ test "collect_region_constraints_from_ir accepts empty and lowered probe IR" {
 }
 
 ///|
-test "solve_region_constraints handles generic placeholders and structural constraints" {
-  let outlives = solve_region_constraints_placeholder([
-    RegionConstraint::placeholder("__err_borrow_outlives_owner"),
+test "solve_region_constraints handles unresolved placeholders and structural constraints" {
+  let unresolved = solve_region_constraints_placeholder([
+    RegionConstraint::placeholder("placeholder.alpha"),
   ])
-  assert_true(outlives is Err(RegionConstraintUnsatisfied(_)))
-
-  let dangling = solve_region_constraints_placeholder([
-    RegionConstraint::placeholder("__err_dangling_reference_escape"),
-  ])
-  assert_true(dangling is Err(RegionConstraintUnsatisfied(_)))
-
-  let unsatisfied = solve_region_constraints_placeholder([
-    RegionConstraint::placeholder("__err_region_constraint_unsatisfied"),
-  ])
-  assert_true(
-    typing_error_kind_from_solution_result(unsatisfied) ==
-    "RegionConstraintUnsatisfied",
-  )
+  assert_true(unresolved is Err(RegionConstraintUnsatisfied(_)))
 
   let solved = solve_region_constraints_placeholder([
     RegionConstraint::outlives(Region::named("a"), Region::named("b")),
@@ -94,25 +74,9 @@ test "solve_region_constraints handles generic placeholders and structural const
 }
 
 ///|
-test "check_borrow_rules_placeholder treats probe-tag IR as ordinary and succeeds" {
-  for c in borrow_probe_error_cases() {
-    let (tag, _) = c
-    let lowered = match lower_to_borrow_ir(borrow_probe_term(tag)) {
-      Ok(ir) => ir
-      Err(_) => panic()
-    }
-    let result = check_borrow_rules_placeholder(
-      lowered,
-      RegionSolution::empty(),
-      BorrowCheckerOptions::default(),
-    )
-    assert_true(result is Ok(_))
-  }
-}
-
-///|
-test "check_borrow_rules_placeholder returns empty facts for ok probe" {
-  let lowered = match lower_to_borrow_ir(borrow_probe_term("__ok_borrow")) {
+test "check_borrow_rules_placeholder keeps ordinary constructors inert" {
+  let lowered = match
+    lower_to_borrow_ir(ordinary_constructor_term("OrdinaryConstructorNoBorrow")) {
     Ok(ir) => ir
     Err(_) => panic()
   }
@@ -132,7 +96,7 @@ test "check_borrow_rules_placeholder returns empty facts for ok probe" {
 }
 
 ///|
-test "collect_region_constraints API accepts pure and probe terms" {
+test "collect_region_constraints API accepts pure and semantic error terms" {
   let state = TypeCheckerState::fresh()
 
   let pure = state.collect_region_constraints(
@@ -141,10 +105,9 @@ test "collect_region_constraints API accepts pure and probe terms" {
   )
   assert_true(pure is Ok(_))
 
-  for c in borrow_probe_error_cases() {
-    let (tag, _) = c
+  for kind in borrow_semantic_error_kinds() {
     let result = state.collect_region_constraints(
-      borrow_probe_term(tag),
+      borrow_semantic_error_term_for_kind(kind),
       Type::unit(),
     )
     assert_true(result is Ok(_))
@@ -152,30 +115,19 @@ test "collect_region_constraints API accepts pure and probe terms" {
 }
 
 ///|
-test "solve_region_constraints API keeps known placeholder constraints generic" {
+test "solve_region_constraints API reports unresolved placeholders" {
   let state = TypeCheckerState::fresh()
-
-  let outlives = state.solve_region_constraints([
-    RegionConstraint::placeholder("__err_borrow_outlives_owner"),
+  let unresolved = state.solve_region_constraints([
+    RegionConstraint::placeholder("placeholder.beta"),
   ])
-  assert_true(outlives is Err(RegionConstraintUnsatisfied(_)))
-
-  let dangling = state.solve_region_constraints([
-    RegionConstraint::placeholder("__err_dangling_reference_escape"),
-  ])
-  assert_true(dangling is Err(RegionConstraintUnsatisfied(_)))
-
-  let unsatisfied = state.solve_region_constraints([
-    RegionConstraint::placeholder("__err_region_constraint_unsatisfied"),
-  ])
-  assert_true(unsatisfied is Err(RegionConstraintUnsatisfied(_)))
+  assert_true(unresolved is Err(RegionConstraintUnsatisfied(_)))
 }
 
 ///|
 test "analyze_borrows preserves legacy no-op when disabled" {
   let state = TypeCheckerState::fresh()
   let result = state.analyze_borrows(
-    borrow_probe_term("__err_use_after_move"),
+    borrow_semantic_error_term_for_kind("UseAfterMove"),
     Type::unit(),
     BorrowCheckerOptions::disabled(),
   )
@@ -190,53 +142,57 @@ test "analyze_borrows preserves legacy no-op when disabled" {
 }
 
 ///|
-test "analyze_borrows accepts all probe error tags when enabled" {
+test "analyze_borrows reports expected semantic error kinds when enabled" {
   let state = TypeCheckerState::fresh()
   let options = BorrowCheckerOptions::default()
 
-  for c in borrow_probe_error_cases() {
-    let (tag, _) = c
+  for kind in borrow_semantic_error_kinds() {
     assert_true(
       typing_error_kind_from_analysis_result(
-        state.analyze_borrows(borrow_probe_term(tag), Type::unit(), options),
-      ) ==
-      "Ok",
-    )
-  }
-}
-
-///|
-test "infer_type_with_borrow_analysis accepts all probe tags when enabled" {
-  let state = TypeCheckerState::fresh()
-  let options = BorrowCheckerOptions::default()
-
-  for c in borrow_probe_error_cases() {
-    let (tag, _) = c
-    assert_true(
-      typing_error_kind_from_type_result(
-        state.infer_type_with_borrow_analysis(borrow_probe_term(tag), options),
-      ) ==
-      "Ok",
-    )
-  }
-}
-
-///|
-test "check_type_with_borrow_analysis accepts all probe tags when enabled" {
-  let state = TypeCheckerState::fresh()
-  let options = BorrowCheckerOptions::default()
-
-  for c in borrow_probe_error_cases() {
-    let (tag, _) = c
-    assert_true(
-      typing_error_kind_from_checked_result(
-        state.check_type_with_borrow_analysis(
-          borrow_probe_term(tag),
+        state.analyze_borrows(
+          borrow_semantic_error_term_for_kind(kind),
           Type::unit(),
           options,
         ),
       ) ==
-      "Ok",
+      kind,
+    )
+  }
+}
+
+///|
+test "infer_type_with_borrow_analysis reports expected semantic error kinds when enabled" {
+  let state = TypeCheckerState::fresh()
+  let options = BorrowCheckerOptions::default()
+
+  for kind in borrow_semantic_error_kinds() {
+    assert_true(
+      typing_error_kind_from_type_result(
+        state.infer_type_with_borrow_analysis(
+          borrow_semantic_error_term_for_kind(kind),
+          options,
+        ),
+      ) ==
+      kind,
+    )
+  }
+}
+
+///|
+test "check_type_with_borrow_analysis reports expected semantic error kinds when enabled" {
+  let state = TypeCheckerState::fresh()
+  let options = BorrowCheckerOptions::default()
+
+  for kind in borrow_semantic_error_kinds() {
+    assert_true(
+      typing_error_kind_from_checked_result(
+        state.check_type_with_borrow_analysis(
+          borrow_semantic_error_term_for_kind(kind),
+          Type::unit(),
+          options,
+        ),
+      ) ==
+      kind,
     )
   }
 }

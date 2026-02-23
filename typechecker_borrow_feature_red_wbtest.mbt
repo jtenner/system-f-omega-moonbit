@@ -279,10 +279,10 @@ test "RED: check wrapper should match legacy checking for pure terms when enable
 }
 
 ///|
-test "RED: synthetic probe tags should not trigger feature errors" {
+test "RED: arbitrary non-borrow constructor tags should not trigger feature errors" {
   let state = TypeCheckerState::fresh()
   let result = state.analyze_borrows(
-    borrow_probe_term("__err_use_after_move"),
+    ordinary_constructor_term("SyntheticUseAfterMoveLikeTag"),
     Type::unit(),
     BorrowCheckerOptions::default(),
   )
@@ -290,10 +290,10 @@ test "RED: synthetic probe tags should not trigger feature errors" {
 }
 
 ///|
-test "RED: invalid-borrow-target probe should behave like ordinary constructor" {
+test "RED: infer wrapper treats non-borrow constructor tags as ordinary constructors" {
   let state = TypeCheckerState::fresh()
   let result = state.infer_type_with_borrow_analysis(
-    borrow_probe_term("__err_invalid_borrow_target"),
+    ordinary_constructor_term("SyntheticInvalidBorrowTargetLikeTag"),
     BorrowCheckerOptions::default(),
   )
   assert_true(result is Ok(_))

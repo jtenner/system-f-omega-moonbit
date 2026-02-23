@@ -24,6 +24,199 @@ fn edge_case_has_outlives_edge(
 }
 
 ///|
+fn nested_projection_borrow_ends_in_expression_term() -> Term {
+  Term::tuple_project(
+    Term::tuple([
+      Term::tuple_project(
+        Term::tuple([
+          Term::borrow_shared(Term::project(Term::var_term("x"), "field")),
+          Term::unit(),
+        ]),
+        1,
+      ),
+      Term::assign(Term::var_term("x"), Term::unit()),
+      Term::unit(),
+    ]),
+    2,
+  )
+}
+
+///|
+fn nested_projection_borrow_escapes_outer_scope_term() -> Term {
+  Term::tuple_project(
+    Term::tuple([
+      Term::tuple_project(
+        Term::tuple([
+          Term::borrow_shared(Term::project(Term::var_term("x"), "field")),
+          Term::unit(),
+        ]),
+        0,
+      ),
+      Term::assign(Term::var_term("x"), Term::unit()),
+      Term::unit(),
+    ]),
+    2,
+  )
+}
+
+///|
+fn non_literal_tuple_projection_borrow_ends_in_expression_term() -> Term {
+  let tuple_source = Term::let_term(
+    "tmp",
+    Term::tuple([
+      Term::borrow_shared(Term::project(Term::var_term("x"), "field")),
+      Term::unit(),
+    ]),
+    Term::var_term("tmp"),
+  )
+  Term::tuple_project(
+    Term::tuple([
+      Term::tuple_project(tuple_source, 1),
+      Term::assign(Term::var_term("x"), Term::unit()),
+      Term::unit(),
+    ]),
+    2,
+  )
+}
+
+///|
+fn non_literal_tuple_projection_borrow_escapes_outer_scope_term() -> Term {
+  let tuple_source = Term::let_term(
+    "tmp",
+    Term::tuple([
+      Term::borrow_shared(Term::project(Term::var_term("x"), "field")),
+      Term::unit(),
+    ]),
+    Term::var_term("tmp"),
+  )
+  Term::tuple_project(
+    Term::tuple([
+      Term::tuple_project(tuple_source, 0),
+      Term::assign(Term::var_term("x"), Term::unit()),
+      Term::unit(),
+    ]),
+    2,
+  )
+}
+
+///|
+fn record_projection_borrow_ends_in_expression_term() -> Term {
+  let record_source = Term::record([
+    ("field", Term::borrow_shared(Term::project(Term::var_term("x"), "field"))),
+    ("other", Term::unit()),
+  ])
+  Term::tuple_project(
+    Term::tuple([
+      Term::project(record_source, "other"),
+      Term::assign(Term::var_term("x"), Term::unit()),
+      Term::unit(),
+    ]),
+    2,
+  )
+}
+
+///|
+fn record_projection_borrow_escapes_outer_scope_term() -> Term {
+  let record_source = Term::record([
+    ("field", Term::borrow_shared(Term::project(Term::var_term("x"), "field"))),
+    ("other", Term::unit()),
+  ])
+  Term::tuple_project(
+    Term::tuple([
+      Term::project(record_source, "field"),
+      Term::assign(Term::var_term("x"), Term::unit()),
+      Term::unit(),
+    ]),
+    2,
+  )
+}
+
+///|
+fn branch_join_tuple_source_term() -> Term {
+  Term::match_term(Term::var_term("scrutinee"), [
+    (
+      Pattern::wildcard(),
+      Term::tuple([
+        Term::borrow_shared(Term::var_term("x")),
+        Term::borrow_shared(Term::var_term("y")),
+      ]),
+    ),
+    (
+      Pattern::wildcard(),
+      Term::tuple([
+        Term::borrow_shared(Term::var_term("z")),
+        Term::borrow_shared(Term::var_term("w")),
+      ]),
+    ),
+  ])
+}
+
+///|
+fn function_returned_tuple_source_term() -> Term {
+  Term::app(
+    Term::lam(
+      "_",
+      Type::unit(),
+      Term::tuple([
+        Term::borrow_shared(Term::var_term("x")),
+        Term::borrow_shared(Term::var_term("y")),
+      ]),
+    ),
+    Term::unit(),
+  )
+}
+
+///|
+fn branch_join_record_source_term() -> Term {
+  Term::match_term(Term::var_term("scrutinee"), [
+    (
+      Pattern::wildcard(),
+      Term::record([
+        ("left", Term::borrow_shared(Term::var_term("x"))),
+        ("right", Term::borrow_shared(Term::var_term("y"))),
+      ]),
+    ),
+    (
+      Pattern::wildcard(),
+      Term::record([
+        ("left", Term::borrow_shared(Term::var_term("z"))),
+        ("right", Term::borrow_shared(Term::var_term("w"))),
+      ]),
+    ),
+  ])
+}
+
+///|
+fn function_returned_record_source_term() -> Term {
+  Term::app(
+    Term::lam(
+      "_",
+      Type::unit(),
+      Term::record([
+        ("left", Term::borrow_shared(Term::var_term("x"))),
+        ("right", Term::borrow_shared(Term::var_term("y"))),
+      ]),
+    ),
+    Term::unit(),
+  )
+}
+
+///|
+fn first_borrow_shared_scope_depth_for_var(
+  ir : BorrowIr,
+  var_name : String,
+) -> Int? {
+  for node in ir.nodes {
+    match node.term {
+      BorrowShared(Var(name)) if name == var_name =>
+        return Some(node.scope_depth)
+      _ => ()
+    }
+  }
+  None
+}
+
+///|
 test "lower_to_borrow_ir lowers lambda terms structurally" {
   let term = Term::lam("x", Type::unit(), Term::var_term("x"))
   let result = lower_to_borrow_ir(term)
@@ -66,20 +259,20 @@ test "RED: lower_to_borrow_ir should emit explicit match-branch boundary markers
 }
 
 ///|
-test "collect_region_constraints treats synthetic probes as ordinary terms" {
+test "collect_region_constraints treats ordinary constructors as inert terms" {
   let state = TypeCheckerState::fresh()
   let result = state.collect_region_constraints(
-    borrow_probe_term("__err_invalid_borrow_target"),
+    ordinary_constructor_term("LegacyProbeLikeInvalidBorrowTarget"),
     Type::unit(),
   )
   assert_true(result is Ok(_))
 }
 
 ///|
-test "check_borrow_rules treats synthetic probes as ordinary terms" {
+test "check_borrow_rules treats ordinary constructors as inert terms" {
   let state = TypeCheckerState::fresh()
   let result = state.check_borrow_rules(
-    borrow_probe_term("__err_invalid_borrow_target"),
+    ordinary_constructor_term("LegacyProbeLikeInvalidBorrowTarget"),
     RegionSolution::empty(),
     BorrowCheckerOptions::default(),
   )
@@ -87,10 +280,10 @@ test "check_borrow_rules treats synthetic probes as ordinary terms" {
 }
 
 ///|
-test "analyze_borrows treats synthetic probes as ordinary terms" {
+test "analyze_borrows treats ordinary constructors as inert terms" {
   let state = TypeCheckerState::fresh()
   let result = state.analyze_borrows(
-    borrow_probe_term("__err_invalid_borrow_target"),
+    ordinary_constructor_term("LegacyProbeLikeInvalidBorrowTarget"),
     Type::unit(),
     BorrowCheckerOptions::default(),
   )
@@ -115,11 +308,11 @@ test "enabled wrappers preserve base typing errors before borrow analysis" {
 }
 
 ///|
-test "enabled wrappers succeed for ordinary constructor probes" {
+test "enabled wrappers succeed for ordinary constructors" {
   let state = TypeCheckerState::fresh()
 
   let inferred = state.infer_type_with_borrow_analysis(
-    borrow_probe_term("__ok_borrow"),
+    ordinary_constructor_term("NoBorrowConstructorA"),
     BorrowCheckerOptions::default(),
   )
   match inferred {
@@ -128,7 +321,7 @@ test "enabled wrappers succeed for ordinary constructor probes" {
   }
 
   let checked = state.check_type_with_borrow_analysis(
-    borrow_probe_term("__err_borrow_conflict"),
+    ordinary_constructor_term("NoBorrowConstructorB"),
     Type::unit(),
     BorrowCheckerOptions::default(),
   )
@@ -139,11 +332,11 @@ test "enabled wrappers succeed for ordinary constructor probes" {
 }
 
 ///|
-test "disabled analyze_borrows short-circuits even on synthetic probes" {
+test "disabled analyze_borrows short-circuits even on ordinary constructors" {
   let state = TypeCheckerState::fresh()
 
   let invalid_result = state.analyze_borrows(
-    borrow_probe_term("__err_invalid_borrow_target"),
+    ordinary_constructor_term("NoBorrowConstructorDisabled"),
     Type::unit(),
     BorrowCheckerOptions::disabled(),
   )
@@ -158,10 +351,10 @@ test "disabled analyze_borrows short-circuits even on synthetic probes" {
 }
 
 ///|
-test "collect_region_constraints_from_ir follows scope depth instead of tags" {
+test "collect_region_constraints_from_ir follows scope depth for inert constructors" {
   let ir = ir_with_two_nodes(
-    borrow_probe_term("__err_use_after_move"),
-    borrow_probe_term("__err_dangling_reference_escape"),
+    ordinary_constructor_term("ScopeDepthMarkerA"),
+    ordinary_constructor_term("ScopeDepthMarkerB"),
   )
   let result = collect_region_constraints_from_ir(ir)
   match result {
@@ -303,8 +496,8 @@ test "RED: collect_region_constraints_from_ir adds polymorphic boundary owner ed
 test "check_borrow_rules_placeholder accepts arbitrary IR nodes" {
   let result = check_borrow_rules_placeholder(
     ir_with_two_nodes(
-      borrow_probe_term("__ok_borrow"),
-      borrow_probe_term("__err_borrow_conflict"),
+      ordinary_constructor_term("ArbitraryConstructorA"),
+      ordinary_constructor_term("ArbitraryConstructorB"),
     ),
     RegionSolution::empty(),
     BorrowCheckerOptions::default(),
@@ -383,10 +576,229 @@ test "RED: check_borrow_rules_placeholder should release loans at lexical scope 
 }
 
 ///|
+test "RED: nested projection borrow that ends in-expression is released before outer assignment" {
+  let state = TypeCheckerState::fresh()
+  let term = nested_projection_borrow_ends_in_expression_term()
+
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(typing_error_kind_from_analysis_result(result) == "Ok")
+}
+
+///|
+test "RED: nested projection borrow that escapes to outer scope conflicts with outer assignment" {
+  let state = TypeCheckerState::fresh()
+  let term = nested_projection_borrow_escapes_outer_scope_term()
+
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(result is Err(MutateWhileBorrowed(_)))
+  match result {
+    Err(MutateWhileBorrowed(place)) => {
+      assert_true(place.root == "x")
+      assert_eq(place.projections.length(), 0)
+    }
+    _ => panic()
+  }
+}
+
+///|
+test "RED: non-literal tuple projection borrow that ends in-expression is released before outer assignment" {
+  let state = TypeCheckerState::fresh()
+  let term = non_literal_tuple_projection_borrow_ends_in_expression_term()
+
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(typing_error_kind_from_analysis_result(result) == "Ok")
+}
+
+///|
+test "RED: non-literal tuple projection borrow that escapes to outer scope conflicts with outer assignment" {
+  let state = TypeCheckerState::fresh()
+  let term = non_literal_tuple_projection_borrow_escapes_outer_scope_term()
+
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(result is Err(MutateWhileBorrowed(_)))
+}
+
+///|
+test "RED: record projection borrow that ends in-expression is released before outer assignment" {
+  let state = TypeCheckerState::fresh()
+  let term = record_projection_borrow_ends_in_expression_term()
+
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(typing_error_kind_from_analysis_result(result) == "Ok")
+}
+
+///|
+test "RED: record projection borrow that escapes to outer scope conflicts with outer assignment" {
+  let state = TypeCheckerState::fresh()
+  let term = record_projection_borrow_escapes_outer_scope_term()
+
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(result is Err(MutateWhileBorrowed(_)))
+}
+
+///|
+test "RED: tuple-projection lowering keeps selected tuple-literal element shallower than non-selected element" {
+  let term = Term::tuple_project(
+    Term::tuple([
+      Term::borrow_shared(Term::var_term("x")),
+      Term::borrow_shared(Term::var_term("y")),
+    ]),
+    0,
+  )
+  let lowered = lower_to_borrow_ir(term)
+  assert_true(lowered is Ok(_))
+  match lowered {
+    Ok(ir) =>
+      match
+        (
+          first_borrow_shared_scope_depth_for_var(ir, "x"),
+          first_borrow_shared_scope_depth_for_var(ir, "y"),
+        ) {
+        (Some(selected_depth), Some(non_selected_depth)) =>
+          assert_true(selected_depth < non_selected_depth)
+        _ => panic()
+      }
+    _ => panic()
+  }
+}
+
+///|
+test "RED: tuple-projection lowering keeps selected non-literal tuple source element shallower than non-selected element" {
+  let tuple_source = Term::let_term(
+    "tmp",
+    Term::tuple([
+      Term::borrow_shared(Term::var_term("x")),
+      Term::borrow_shared(Term::var_term("y")),
+    ]),
+    Term::var_term("tmp"),
+  )
+  let term = Term::tuple_project(tuple_source, 1)
+  let lowered = lower_to_borrow_ir(term)
+  assert_true(lowered is Ok(_))
+  match lowered {
+    Ok(ir) =>
+      match
+        (
+          first_borrow_shared_scope_depth_for_var(ir, "x"),
+          first_borrow_shared_scope_depth_for_var(ir, "y"),
+        ) {
+        (Some(non_selected_depth), Some(selected_depth)) =>
+          assert_true(selected_depth < non_selected_depth)
+        _ => panic()
+      }
+    _ => panic()
+  }
+}
+
+///|
+test "RED: tuple-projection lowering keeps selected match-joined tuple element shallower than non-selected element" {
+  let term = Term::tuple_project(branch_join_tuple_source_term(), 1)
+  let lowered = lower_to_borrow_ir(term)
+  assert_true(lowered is Ok(_))
+  match lowered {
+    Ok(ir) =>
+      match
+        (
+          first_borrow_shared_scope_depth_for_var(ir, "x"),
+          first_borrow_shared_scope_depth_for_var(ir, "y"),
+        ) {
+        (Some(non_selected_depth), Some(selected_depth)) =>
+          assert_true(selected_depth < non_selected_depth)
+        _ => panic()
+      }
+    _ => panic()
+  }
+}
+
+///|
+test "RED: tuple-projection lowering keeps selected function-returned tuple element shallower than non-selected element" {
+  let term = Term::tuple_project(function_returned_tuple_source_term(), 1)
+  let lowered = lower_to_borrow_ir(term)
+  assert_true(lowered is Ok(_))
+  match lowered {
+    Ok(ir) =>
+      match
+        (
+          first_borrow_shared_scope_depth_for_var(ir, "x"),
+          first_borrow_shared_scope_depth_for_var(ir, "y"),
+        ) {
+        (Some(non_selected_depth), Some(selected_depth)) =>
+          assert_true(selected_depth < non_selected_depth)
+        _ => panic()
+      }
+    _ => panic()
+  }
+}
+
+///|
+test "RED: record-projection lowering keeps selected match-joined field shallower than non-selected field" {
+  let term = Term::project(branch_join_record_source_term(), "right")
+  let lowered = lower_to_borrow_ir(term)
+  assert_true(lowered is Ok(_))
+  match lowered {
+    Ok(ir) =>
+      match
+        (
+          first_borrow_shared_scope_depth_for_var(ir, "x"),
+          first_borrow_shared_scope_depth_for_var(ir, "y"),
+        ) {
+        (Some(non_selected_depth), Some(selected_depth)) =>
+          assert_true(selected_depth < non_selected_depth)
+        _ => panic()
+      }
+    _ => panic()
+  }
+}
+
+///|
+test "RED: record-projection lowering keeps selected function-returned field shallower than non-selected field" {
+  let term = Term::project(function_returned_record_source_term(), "right")
+  let lowered = lower_to_borrow_ir(term)
+  assert_true(lowered is Ok(_))
+  match lowered {
+    Ok(ir) =>
+      match
+        (
+          first_borrow_shared_scope_depth_for_var(ir, "x"),
+          first_borrow_shared_scope_depth_for_var(ir, "y"),
+        ) {
+        (Some(non_selected_depth), Some(selected_depth)) =>
+          assert_true(selected_depth < non_selected_depth)
+        _ => panic()
+      }
+    _ => panic()
+  }
+}
+
+///|
 test "collect_region_constraints_from_ir handles unrecognized-first-node IR" {
   let ir = ir_with_two_nodes(
     Term::unit(),
-    borrow_probe_term("__err_borrow_outlives_owner"),
+    ordinary_constructor_term("UnrecognizedConstructorAfterUnit"),
   )
   let result = collect_region_constraints_from_ir(ir)
   assert_true(result is Ok(_))
@@ -396,7 +808,7 @@ test "collect_region_constraints_from_ir handles unrecognized-first-node IR" {
 test "check_borrow_rules_placeholder handles unrecognized-first-node IR" {
   let ir = ir_with_two_nodes(
     Term::unit(),
-    borrow_probe_term("__err_use_after_move"),
+    ordinary_constructor_term("AnotherUnrecognizedConstructor"),
   )
   let result = check_borrow_rules_placeholder(
     ir,
@@ -407,18 +819,18 @@ test "check_borrow_rules_placeholder handles unrecognized-first-node IR" {
 }
 
 ///|
-test "solve_region_constraints treats legacy sentinel placeholders as generic unsatisfied constraints" {
+test "solve_region_constraints treats placeholder constraints as generic unsatisfied constraints" {
   let result = solve_region_constraints_placeholder([
-    RegionConstraint::placeholder("__err_region_constraint_unsatisfied"),
-    RegionConstraint::placeholder("__err_dangling_reference_escape"),
-    RegionConstraint::placeholder("__err_borrow_outlives_owner"),
+    RegionConstraint::placeholder("placeholder.constraint.unsatisfied"),
+    RegionConstraint::placeholder("placeholder.constraint.dangling"),
+    RegionConstraint::placeholder("placeholder.constraint.outlives"),
   ])
   assert_true(result is Err(RegionConstraintUnsatisfied(_)))
   match result {
     Err(RegionConstraintUnsatisfied(constraint)) =>
       assert_true(
         constraint ==
-        RegionConstraint::placeholder("__err_region_constraint_unsatisfied"),
+        RegionConstraint::placeholder("placeholder.constraint.unsatisfied"),
       )
     _ => panic()
   }
@@ -461,8 +873,8 @@ test "RED: check_borrow_rules_placeholder reports unresolved solved constraints 
   let enabled_opts = BorrowCheckerOptions::default()
   let result = check_borrow_rules_placeholder(
     ir_with_two_nodes(
-      borrow_probe_term("__err_use_after_move"),
-      borrow_probe_term("__ok_borrow"),
+      ordinary_constructor_term("UnresolvedSolvedConstraintNodeA"),
+      ordinary_constructor_term("UnresolvedSolvedConstraintNodeB"),
     ),
     solved,
     enabled_opts,
@@ -486,8 +898,8 @@ test "disabled check_borrow_rules_placeholder remains no-op for unresolved solve
   let disabled_opts = BorrowCheckerOptions::disabled()
   let result = check_borrow_rules_placeholder(
     ir_with_two_nodes(
-      borrow_probe_term("__err_use_after_move"),
-      borrow_probe_term("__ok_borrow"),
+      ordinary_constructor_term("DisabledUnresolvedNodeA"),
+      ordinary_constructor_term("DisabledUnresolvedNodeB"),
     ),
     solved,
     disabled_opts,
@@ -506,7 +918,7 @@ test "analyze_borrows with use_nll variation succeeds for ordinary constructors"
   }
 
   let result = state.analyze_borrows(
-    borrow_probe_term("__err_assign_to_immutable"),
+    ordinary_constructor_term("UseNllOrdinaryConstructor"),
     Type::unit(),
     opts,
   )
@@ -593,6 +1005,52 @@ test "RED: generalized region unsatisfied ops emit structural unsatisfied constr
           Region::named("alpha"),
           Region::named("omega"),
         ),
+      )
+    _ => panic()
+  }
+}
+
+///|
+test "RED: generalized region unsatisfied ops preserve infer-to-static payload shape" {
+  let state = TypeCheckerState::fresh()
+  let term = borrow_intrinsic_ops_term([
+    Term::con("BorrowOpRegionUnsatisfied__infer:7__static", Type::unit()),
+  ])
+
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(result is Err(RegionConstraintUnsatisfied(_)))
+  match result {
+    Err(RegionConstraintUnsatisfied(constraint)) =>
+      assert_true(
+        constraint ==
+        RegionConstraint::outlives(Region::infer(7), Region::static_region()),
+      )
+    _ => panic()
+  }
+}
+
+///|
+test "RED: generalized region unsatisfied ops preserve static-to-infer payload shape" {
+  let state = TypeCheckerState::fresh()
+  let term = borrow_intrinsic_ops_term([
+    Term::con("BorrowOpRegionUnsatisfied__static__infer:11", Type::unit()),
+  ])
+
+  let result = state.analyze_borrows(
+    term,
+    Type::unit(),
+    BorrowCheckerOptions::default(),
+  )
+  assert_true(result is Err(RegionConstraintUnsatisfied(_)))
+  match result {
+    Err(RegionConstraintUnsatisfied(constraint)) =>
+      assert_true(
+        constraint ==
+        RegionConstraint::outlives(Region::static_region(), Region::infer(11)),
       )
     _ => panic()
   }

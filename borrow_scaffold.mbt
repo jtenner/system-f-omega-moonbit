@@ -914,6 +914,382 @@ fn add_owner_outlives_boundary_constraints(
 }
 
 ///|
+fn lower_tuple_projection_tuple_literal_into_ir(
+  tuple_term : Term,
+  elements : Array[Term],
+  projected_index : Int,
+  projection_scope_depth : Int,
+  next_id : Int,
+  nodes : Array[BorrowIrNode],
+) -> Int {
+  let tuple_id = next_id
+  nodes.push(BorrowIrNode::{
+    id: tuple_id,
+    term: tuple_term,
+    scope_depth: projection_scope_depth + 1,
+  })
+  let mut cursor = tuple_id + 1
+
+  loop 0 {
+    i if i < elements.length() => {
+      let element_scope_depth = if i == projected_index {
+        projection_scope_depth
+      } else {
+        projection_scope_depth + 1
+      }
+      cursor = lower_term_into_ir(
+        elements[i],
+        element_scope_depth,
+        cursor,
+        nodes,
+      )
+      continue i + 1
+    }
+    _ => ()
+  }
+
+  cursor
+}
+
+///|
+fn lower_tuple_projection_passthrough_let_into_ir(
+  tuple_term : Term,
+  binder_name : String,
+  tuple_value : Term,
+  body : Term,
+  projected_index : Int,
+  projection_scope_depth : Int,
+  next_id : Int,
+  nodes : Array[BorrowIrNode],
+) -> Int {
+  let let_id = next_id
+  nodes.push(BorrowIrNode::{
+    id: let_id,
+    term: tuple_term,
+    scope_depth: projection_scope_depth + 1,
+  })
+  let mut cursor = let_id + 1
+
+  let can_project_through_body = match body {
+    Var(body_name) => body_name == binder_name
+    _ => false
+  }
+
+  if can_project_through_body {
+    cursor = lower_tuple_projection_source_into_ir(
+      tuple_value, projected_index, projection_scope_depth, cursor, nodes,
+    )
+  } else {
+    cursor = lower_term_into_ir(
+      tuple_value,
+      projection_scope_depth + 1,
+      cursor,
+      nodes,
+    )
+  }
+
+  cursor = lower_term_into_ir(body, projection_scope_depth + 1, cursor, nodes)
+  cursor
+}
+
+///|
+fn lower_tuple_projection_passthrough_match_into_ir(
+  tuple_term : Term,
+  scrutinee : Term,
+  cases : Array[(Pattern, Term)],
+  projected_index : Int,
+  projection_scope_depth : Int,
+  next_id : Int,
+  nodes : Array[BorrowIrNode],
+) -> Int {
+  let match_id = next_id
+  nodes.push(BorrowIrNode::{
+    id: match_id,
+    term: tuple_term,
+    scope_depth: projection_scope_depth + 1,
+  })
+  let mut cursor = match_id + 1
+
+  cursor = lower_term_into_ir(
+    scrutinee,
+    projection_scope_depth + 1,
+    cursor,
+    nodes,
+  )
+  for case_entry in cases {
+    let (_, body_term) = case_entry
+    cursor = lower_tuple_projection_source_into_ir(
+      body_term, projected_index, projection_scope_depth, cursor, nodes,
+    )
+    nodes.push(BorrowIrNode::{
+      id: cursor,
+      term: borrow_ir_match_branch_boundary_term(),
+      scope_depth: projection_scope_depth,
+    })
+    cursor = cursor + 1
+  }
+
+  cursor
+}
+
+///|
+fn lower_tuple_projection_passthrough_lambda_app_into_ir(
+  tuple_term : Term,
+  callee : Term,
+  arg : Term,
+  projected_index : Int,
+  projection_scope_depth : Int,
+  next_id : Int,
+  nodes : Array[BorrowIrNode],
+) -> Int {
+  match callee {
+    Lam(_, _, body) => {
+      let app_id = next_id
+      nodes.push(BorrowIrNode::{
+        id: app_id,
+        term: tuple_term,
+        scope_depth: projection_scope_depth + 1,
+      })
+      let mut cursor = app_id + 1
+      cursor = lower_term_into_ir(
+        arg,
+        projection_scope_depth + 1,
+        cursor,
+        nodes,
+      )
+      cursor = lower_tuple_projection_source_into_ir(
+        body, projected_index, projection_scope_depth, cursor, nodes,
+      )
+      cursor
+    }
+    _ =>
+      lower_term_into_ir(tuple_term, projection_scope_depth + 1, next_id, nodes)
+  }
+}
+
+///|
+fn lower_tuple_projection_source_into_ir(
+  tuple_term : Term,
+  projected_index : Int,
+  projection_scope_depth : Int,
+  next_id : Int,
+  nodes : Array[BorrowIrNode],
+) -> Int {
+  match tuple_term {
+    Tuple(elements) =>
+      lower_tuple_projection_tuple_literal_into_ir(
+        tuple_term, elements, projected_index, projection_scope_depth, next_id, nodes,
+      )
+    Let(name, tuple_value, body) =>
+      lower_tuple_projection_passthrough_let_into_ir(
+        tuple_term, name, tuple_value, body, projected_index, projection_scope_depth,
+        next_id, nodes,
+      )
+    Match(scrutinee, cases) =>
+      lower_tuple_projection_passthrough_match_into_ir(
+        tuple_term, scrutinee, cases, projected_index, projection_scope_depth, next_id,
+        nodes,
+      )
+    App(callee, arg) =>
+      lower_tuple_projection_passthrough_lambda_app_into_ir(
+        tuple_term, callee, arg, projected_index, projection_scope_depth, next_id,
+        nodes,
+      )
+    _ =>
+      lower_term_into_ir(tuple_term, projection_scope_depth + 1, next_id, nodes)
+  }
+}
+
+///|
+fn lower_record_projection_record_literal_into_ir(
+  record_term : Term,
+  fields : Array[(String, Term)],
+  selected_label : String,
+  projection_scope_depth : Int,
+  next_id : Int,
+  nodes : Array[BorrowIrNode],
+) -> Int {
+  let record_id = next_id
+  nodes.push(BorrowIrNode::{
+    id: record_id,
+    term: record_term,
+    scope_depth: projection_scope_depth + 1,
+  })
+  let mut cursor = record_id + 1
+
+  for field_entry in fields {
+    let (label, field_term) = field_entry
+    let field_scope_depth = if label == selected_label {
+      projection_scope_depth
+    } else {
+      projection_scope_depth + 1
+    }
+    cursor = lower_term_into_ir(field_term, field_scope_depth, cursor, nodes)
+  }
+
+  cursor
+}
+
+///|
+fn lower_record_projection_passthrough_let_into_ir(
+  record_term : Term,
+  binder_name : String,
+  record_value : Term,
+  body : Term,
+  selected_label : String,
+  projection_scope_depth : Int,
+  next_id : Int,
+  nodes : Array[BorrowIrNode],
+) -> Int {
+  let let_id = next_id
+  nodes.push(BorrowIrNode::{
+    id: let_id,
+    term: record_term,
+    scope_depth: projection_scope_depth + 1,
+  })
+  let mut cursor = let_id + 1
+
+  let can_project_through_body = match body {
+    Var(body_name) => body_name == binder_name
+    _ => false
+  }
+
+  if can_project_through_body {
+    cursor = lower_record_projection_source_into_ir(
+      record_value, selected_label, projection_scope_depth, cursor, nodes,
+    )
+  } else {
+    cursor = lower_term_into_ir(
+      record_value,
+      projection_scope_depth + 1,
+      cursor,
+      nodes,
+    )
+  }
+
+  cursor = lower_term_into_ir(body, projection_scope_depth + 1, cursor, nodes)
+  cursor
+}
+
+///|
+fn lower_record_projection_passthrough_match_into_ir(
+  record_term : Term,
+  scrutinee : Term,
+  cases : Array[(Pattern, Term)],
+  selected_label : String,
+  projection_scope_depth : Int,
+  next_id : Int,
+  nodes : Array[BorrowIrNode],
+) -> Int {
+  let match_id = next_id
+  nodes.push(BorrowIrNode::{
+    id: match_id,
+    term: record_term,
+    scope_depth: projection_scope_depth + 1,
+  })
+  let mut cursor = match_id + 1
+
+  cursor = lower_term_into_ir(
+    scrutinee,
+    projection_scope_depth + 1,
+    cursor,
+    nodes,
+  )
+  for case_entry in cases {
+    let (_, body_term) = case_entry
+    cursor = lower_record_projection_source_into_ir(
+      body_term, selected_label, projection_scope_depth, cursor, nodes,
+    )
+    nodes.push(BorrowIrNode::{
+      id: cursor,
+      term: borrow_ir_match_branch_boundary_term(),
+      scope_depth: projection_scope_depth,
+    })
+    cursor = cursor + 1
+  }
+
+  cursor
+}
+
+///|
+fn lower_record_projection_passthrough_lambda_app_into_ir(
+  record_term : Term,
+  callee : Term,
+  arg : Term,
+  selected_label : String,
+  projection_scope_depth : Int,
+  next_id : Int,
+  nodes : Array[BorrowIrNode],
+) -> Int {
+  match callee {
+    Lam(_, _, body) => {
+      let app_id = next_id
+      nodes.push(BorrowIrNode::{
+        id: app_id,
+        term: record_term,
+        scope_depth: projection_scope_depth + 1,
+      })
+      let mut cursor = app_id + 1
+      cursor = lower_term_into_ir(
+        arg,
+        projection_scope_depth + 1,
+        cursor,
+        nodes,
+      )
+      cursor = lower_record_projection_source_into_ir(
+        body, selected_label, projection_scope_depth, cursor, nodes,
+      )
+      cursor
+    }
+    _ =>
+      lower_term_into_ir(
+        record_term,
+        projection_scope_depth + 1,
+        next_id,
+        nodes,
+      )
+  }
+}
+
+///|
+fn lower_record_projection_source_into_ir(
+  record_term : Term,
+  selected_label : String,
+  projection_scope_depth : Int,
+  next_id : Int,
+  nodes : Array[BorrowIrNode],
+) -> Int {
+  match record_term {
+    Record(fields) =>
+      lower_record_projection_record_literal_into_ir(
+        record_term, fields, selected_label, projection_scope_depth, next_id, nodes,
+      )
+    Let(name, record_value, body) =>
+      lower_record_projection_passthrough_let_into_ir(
+        record_term, name, record_value, body, selected_label, projection_scope_depth,
+        next_id, nodes,
+      )
+    Match(scrutinee, cases) =>
+      lower_record_projection_passthrough_match_into_ir(
+        record_term, scrutinee, cases, selected_label, projection_scope_depth, next_id,
+        nodes,
+      )
+    App(callee, arg) =>
+      lower_record_projection_passthrough_lambda_app_into_ir(
+        record_term, callee, arg, selected_label, projection_scope_depth, next_id,
+        nodes,
+      )
+    _ =>
+      lower_term_into_ir(
+        record_term,
+        projection_scope_depth + 1,
+        next_id,
+        nodes,
+      )
+  }
+}
+
+///|
 fn lower_term_into_ir(
   term : Term,
   scope_depth : Int,
@@ -973,8 +1349,10 @@ fn lower_term_into_ir(
         let (_, field_term) = field_entry
         cursor = lower_term_into_ir(field_term, scope_depth + 1, cursor, nodes)
       }
-    Project(record_term, _) =>
-      cursor = lower_term_into_ir(record_term, scope_depth + 1, cursor, nodes)
+    Project(record_term, label) =>
+      cursor = lower_record_projection_source_into_ir(
+        record_term, label, scope_depth, cursor, nodes,
+      )
     Inject(_, value_term, _) =>
       cursor = lower_term_into_ir(value_term, scope_depth + 1, cursor, nodes)
     Match(scrutinee, cases) => {
@@ -999,8 +1377,10 @@ fn lower_term_into_ir(
       for element in elements {
         cursor = lower_term_into_ir(element, scope_depth + 1, cursor, nodes)
       }
-    TupleProject(tuple_term, _) =>
-      cursor = lower_term_into_ir(tuple_term, scope_depth + 1, cursor, nodes)
+    TupleProject(tuple_term, index) =>
+      cursor = lower_tuple_projection_source_into_ir(
+        tuple_term, index, scope_depth, cursor, nodes,
+      )
   }
   cursor
 }

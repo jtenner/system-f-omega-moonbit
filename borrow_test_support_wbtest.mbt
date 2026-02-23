@@ -53,8 +53,25 @@ fn sample_borrow_error(kind : String, payload : String) -> TypingError {
 }
 
 ///|
-fn borrow_probe_term(tag : String) -> Term {
+fn ordinary_constructor_term(tag : String) -> Term {
   Term::con(tag, Type::unit())
+}
+
+///|
+fn borrow_semantic_error_term_for_kind(kind : String) -> Term {
+  match kind {
+    "UseAfterMove" => borrow_feature_term("err_use_after_move_01")
+    "MovedValueBorrow" => borrow_feature_term("err_moved_value_borrow_01")
+    "BorrowConflict" => borrow_feature_term("err_borrow_conflict_01")
+    "MutateWhileBorrowed" => borrow_feature_term("err_mutate_while_borrowed_01")
+    "AssignToImmutable" => borrow_feature_term("err_assign_to_immutable_01")
+    "BorrowOutlivesOwner" => borrow_feature_term("err_outlives_owner_01")
+    "DanglingReferenceEscape" => borrow_feature_term("err_dangling_escape_01")
+    "InvalidBorrowTarget" => borrow_feature_term("err_invalid_target_01")
+    "RegionConstraintUnsatisfied" =>
+      borrow_feature_term("err_region_unsatisfied_01")
+    _ => Term::unit()
+  }
 }
 
 ///|

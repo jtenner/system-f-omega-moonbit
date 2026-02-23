@@ -1,7 +1,7 @@
 # Agent TODO: Remaining Backlog
 
 ## Verified State (2026-02-23)
-- Library tests are green: `/home/jtenner/.moon/bin/moon test --package jtenner/sfo` -> `Total tests: 731, passed: 731, failed: 0`.
+- Library tests are green: `/home/jtenner/.moon/bin/moon test --package jtenner/sfo` -> `Total tests: 751, passed: 751, failed: 0`.
 - Completed items were removed during cleanup. This file tracks only unfinished work.
 
 ## Priority P0: README Beginner Guide and Full-Library Examples
@@ -39,13 +39,23 @@
 - [x] Extend region constraint generation for trait dictionary flow and polymorphic boundaries.
 - [x] Add explicit tests for region safety across trait abstraction and polymorphic generalization boundaries.
 - [x] Remove legacy `collect_known_region_probe_errors` sentinel special-casing once direct placeholder compatibility tests are migrated to structural region-op programs.
-- [ ] Add focused coverage for generalized `BorrowOpRegionUnsatisfied` region token forms beyond `named:<...>` (`infer:<id>`, `static`) and verify payload shape.
-- [ ] Replace shape-based fallback detection in `check_type_with_native_policy_flag` with execution-path signaling from `check_type` core to guarantee exact no-rescan behavior as check rules evolve.
-- [ ] Add targeted nested mixed infer/check tests to ensure native policy executes exactly once for fallback-rooted terms and still runs for explicit-check roots with nested borrows.
+- [x] Add focused coverage for generalized `BorrowOpRegionUnsatisfied` payload shape for `infer:<id> -> static`.
+- [x] Add focused coverage for generalized `BorrowOpRegionUnsatisfied` payload shape for `static -> infer:<id>`.
+- [x] Replace shape-based fallback detection in `check_type_with_native_policy_flag` with execution-path signaling from `check_type` core to guarantee exact no-rescan behavior as check rules evolve.
+- [x] Add targeted nested mixed infer/check tests to ensure native policy executes exactly once for fallback-rooted terms and still runs for explicit-check roots with nested borrows.
+- [x] Add mixed infer/check regression coverage for additional explicit-check roots (`Lam`, `TyLam`, `TraitLam`, `Move`) to lock root-only fallback signaling semantics.
+- [x] Add borrow-lifetime regression tests that distinguish nested projection borrows that end in-expression from borrows that escape to outer scope.
+- [x] Extend projection-escape lifetime lowering coverage beyond tuple literals (e.g. record projection and non-literal tuple sources) to prevent unsound borrow shortening in additional projection forms.
+- [x] Add IR-level regression assertions for tuple-projection lowering so selected-element vs non-selected-element scope depths remain stable across refactors.
+- [x] Extend tuple-projection passthrough lowering beyond let-identity sources to additional non-literal producers (e.g. match/if-style branch joins and function-returned tuples) without regressing current scope semantics.
+- [x] Add record-projection passthrough lowering for non-literal record sources and IR-level selected-vs-non-selected field depth assertions.
+- [ ] Extend projection passthrough to additional call shapes beyond direct lambda applications (e.g. let-bound function aliases) while keeping conservative fallback for unknown callees.
+- [ ] Add nested-producer regression coverage (`let -> match -> projection`, `let -> app -> projection`) to lock scope-depth and branch-boundary invariants across composed lowering paths.
 
 ## Priority P2: Probe Removal and Test Migration
-- [ ] Migrate remaining probe-based error tests to real borrow AST programs while preserving semantic coverage.
-- [ ] Retire probe-only scaffolding (`borrow_probe_term`, `__err_*`-driven scenarios) after equivalent native/semantic coverage is confirmed.
+- P2 status: completed on 2026-02-23 via semantic borrow-program migration in negative/spec/edge-case suites.
+- [x] Migrate remaining probe-based error tests to real borrow AST programs while preserving semantic coverage.
+- [x] Retire probe-only scaffolding (`borrow_probe_term`, `__err_*`-driven scenarios) after equivalent native/semantic coverage is confirmed.
 
 ## Priority P3: Diagnostics and Developer UX
 - [ ] Finalize actionable payload formats for all borrow/lifetime errors in `types.mbt` (especially `BorrowConflict`).
@@ -56,6 +66,7 @@
 - [ ] Split `borrow_scaffold.mbt` into focused modules (`borrow_ir.mbt`, `region_solver.mbt`, `borrow_checker.mbt`) with no behavior regression.
 - [ ] Regenerate and review `pkg.generated.mbti` after each API-affecting change.
 - [ ] Keep `/home/jtenner/.moon/bin/moon fmt` and `/home/jtenner/.moon/bin/moon test --package jtenner/sfo` green after each vertical slice.
+- [ ] Remove or consume currently unused borrow test-support helpers (`typing_error_kind_from_ir_result`, `typing_error_kind_from_constraints_result`, `typing_error_kind_from_facts_result`) to keep test runs warning-clean.
 
 ## Validation Commands
 - `/home/jtenner/.moon/bin/moon test --package jtenner/sfo`

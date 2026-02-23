@@ -2413,13 +2413,11 @@ pub fn TypeCheckerState::apply_substitution(
 }
 
 ///|
-/// Description: Checks a term against an expected type and returns solved substitutions.
-/// Example: `let _ = TypeCheckerState::fresh().check_type(Term::unit(), Type::unit())`
-pub fn TypeCheckerState::check_type(
+fn TypeCheckerState::check_type_core(
   self : TypeCheckerState,
   term : Term,
   expected_type : Type,
-) -> Result[CheckedType, TypingError] {
+) -> Result[(CheckedType, Bool), TypingError] {
   let expected_type = self.normalize_type(expected_type)
 
   // Expected type must be a proper value type (kind *).
@@ -2460,7 +2458,7 @@ pub fn TypeCheckerState::check_type(
       if !self.types_equal(actual_ref_ty, expected_ref_ty) {
         return Err(TypeMismatch(expected_ref_ty, actual_ref_ty))
       }
-      return Ok({ ty: expected_ref_ty, subst })
+      return Ok(({ ty: expected_ref_ty, subst }, false))
     }
     (BorrowMut(target), Ref(_, Mutable, expected_inner)) => {
       let target_place = match native_place_from_term_for_typing(target) {
@@ -2489,7 +2487,7 @@ pub fn TypeCheckerState::check_type(
       if !self.types_equal(actual_ref_ty, expected_ref_ty) {
         return Err(TypeMismatch(expected_ref_ty, actual_ref_ty))
       }
-      return Ok({ ty: expected_ref_ty, subst })
+      return Ok(({ ty: expected_ref_ty, subst }, false))
     }
     (Deref(inner), _) => {
       let inferred = match infer_deref_type(self, inner) {
@@ -2497,18 +2495,24 @@ pub fn TypeCheckerState::check_type(
         Err(t) => return Err(t)
       }
       if self.is_assignable_to(inferred, expected_type) {
-        return Ok({ ty: expected_type, subst: Map::new() })
+        return Ok(({ ty: expected_type, subst: Map::new() }, false))
       }
       return Err(TypeMismatch(expected_type, inferred))
     }
     (Assign(target, value), Tuple(expected_elements)) =>
       if expected_elements.length() == 0 {
         match infer_assign_type(self, target, value) {
-          Ok(_) => return Ok({ ty: expected_type, subst: Map::new() })
+          Ok(_) => return Ok(({ ty: expected_type, subst: Map::new() }, false))
           Err(t) => return Err(t)
         }
       }
-    (Move(inner), _) => return self.check_type(inner, expected_type)
+    (Move(inner), _) => {
+      let checked = match self.check_type(inner, expected_type) {
+        Ok(checked) => checked
+        Err(t) => return Err(t)
+      }
+      return Ok((checked, false))
+    }
     _ => ()
   }
 
@@ -2564,7 +2568,7 @@ pub fn TypeCheckerState::check_type(
         }
       }
 
-      return Ok({ ty: final_type, subst: merged_subst })
+      return Ok(({ ty: final_type, subst: merged_subst }, false))
     }
     _ => ()
   }
@@ -2586,7 +2590,7 @@ pub fn TypeCheckerState::check_type(
         Ok(r) => r
       }
 
-      return Ok({ ty: expected_type, subst: body_result.subst })
+      return Ok(({ ty: expected_type, subst: body_result.subst }, false))
     }
     _ => ()
   }
@@ -2641,7 +2645,7 @@ pub fn TypeCheckerState::check_type(
         Ok(r) => r
       }
 
-      return Ok({ ty: expected_type, subst: body_result.subst })
+      return Ok(({ ty: expected_type, subst: body_result.subst }, false))
     }
     _ => ()
   }
@@ -2694,10 +2698,15 @@ pub fn TypeCheckerState::check_type(
         acc_subst = merge_substs(field_result.subst, acc_subst)
       }
 
-      return Ok({
-        ty: self.apply_substitution(acc_subst, expected_type),
-        subst: acc_subst,
-      })
+      return Ok(
+        (
+          {
+            ty: self.apply_substitution(acc_subst, expected_type),
+            subst: acc_subst,
+          },
+          false,
+        ),
+      )
     }
     _ => ()
   }
@@ -2727,10 +2736,15 @@ pub fn TypeCheckerState::check_type(
         }
         _ => ()
       }
-      return Ok({
-        ty: self.apply_substitution(acc_subst, expected_type),
-        subst: acc_subst,
-      })
+      return Ok(
+        (
+          {
+            ty: self.apply_substitution(acc_subst, expected_type),
+            subst: acc_subst,
+          },
+          false,
+        ),
+      )
     }
     _ => ()
   }
@@ -2756,10 +2770,15 @@ pub fn TypeCheckerState::check_type(
             Err(t) => return Err(t)
             Ok(r) => r
           }
-          return Ok({
-            ty: self.apply_substitution(value_result.subst, expected_type),
-            subst: value_result.subst,
-          })
+          return Ok(
+            (
+              {
+                ty: self.apply_substitution(value_result.subst, expected_type),
+                subst: value_result.subst,
+              },
+              false,
+            ),
+          )
         }
         _ => return Err(NotAVariant(expected_type))
       }
@@ -2777,7 +2796,7 @@ pub fn TypeCheckerState::check_type(
             Err(t) => return Err(t)
             Ok(r) => r
           }
-          return Ok({ ty: expected_type, subst: term_result.subst })
+          return Ok(({ ty: expected_type, subst: term_result.subst }, false))
         }
         _ => return Err(TypeMismatch(expected_type, fold_ty))
       }
@@ -2834,7 +2853,21 @@ pub fn TypeCheckerState::check_type(
     return Err(TypeMismatch(resolved_expected, final_inferred))
   }
 
-  Ok({ ty: resolved_expected, subst: final_subst })
+  Ok(({ ty: resolved_expected, subst: final_subst }, true))
+}
+
+///|
+/// Description: Checks a term against an expected type and returns solved substitutions.
+/// Example: `let _ = TypeCheckerState::fresh().check_type(Term::unit(), Type::unit())`
+pub fn TypeCheckerState::check_type(
+  self : TypeCheckerState,
+  term : Term,
+  expected_type : Type,
+) -> Result[CheckedType, TypingError] {
+  match self.check_type_core(term, expected_type) {
+    Ok((checked, _used_infer_fallback)) => Ok(checked)
+    Err(t) => Err(t)
+  }
 }
 
 ///|
@@ -3868,50 +3901,22 @@ fn infer_type_with_native_policy_flag(
 }
 
 ///|
-fn check_type_path_uses_infer_fallback(
-  term : Term,
-  expected_type : Type,
-) -> Bool {
-  match (term, expected_type) {
-    (BorrowShared(_), Ref(_, Shared, _)) => false
-    (BorrowShared(_), _) => true
-    (BorrowMut(_), Ref(_, Mutable, _)) => false
-    (BorrowMut(_), _) => true
-    (Deref(_), _) => false
-    (Assign(_, _), Tuple(expected_elements)) => expected_elements.length() != 0
-    (Assign(_, _), _) => true
-    (Move(_), _) => false
-    (Lam(_, _, _), Arrow(_, _)) => false
-    (Lam(_, _, _), _) => true
-    (TyLam(_, _, _), Forall(_, _, _)) => false
-    (TyLam(_, _, _), _) => true
-    (TraitLam(_, _, _, _, _, _), BoundedForall(_, _, _, _)) => false
-    (TraitLam(_, _, _, _, _, _), _) => true
-    (Record(_), Record(_)) => false
-    (Record(_), _) => true
-    (Tuple(_), Tuple(_)) => false
-    (Tuple(_), _) => true
-    (Inject(_, _, _), _) => false
-    (Fold(_, _), _) => false
-    _ => true
-  }
-}
-
-///|
 fn check_type_with_native_policy_flag(
   state : TypeCheckerState,
   term : Term,
   expected_type : Type,
 ) -> Result[(CheckedType, Bool), TypingError] {
-  let normalized_expected = state.normalize_type(expected_type)
-  let checked = match state.check_type(term, expected_type) {
-    Ok(checked) => checked
+  let checked_with_fallback_flag = match
+    state.check_type_core(term, expected_type) {
+    Ok(checked_with_fallback_flag) => checked_with_fallback_flag
     Err(t) => return Err(t)
   }
+  let checked = checked_with_fallback_flag.0
+  let used_infer_fallback = checked_with_fallback_flag.1
   let native_policy_already_applied_by_fallback = term_contains_native_borrow_syntax(
       term,
     ) &&
-    check_type_path_uses_infer_fallback(term, normalized_expected)
+    used_infer_fallback
   Ok((checked, native_policy_already_applied_by_fallback))
 }
 
