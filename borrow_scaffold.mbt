@@ -646,6 +646,55 @@ fn place_key(place : Place) -> String {
 }
 
 ///|
+fn place_from_key_path(path : String) -> Place? {
+  if path.is_empty() {
+    return None
+  }
+
+  let tokens = path.split(".").map(StringView::to_string).collect()
+  if tokens.length() == 0 || tokens[0].is_empty() {
+    return None
+  }
+
+  let mut place = Place::root(tokens[0])
+  let mut index = 1
+  while index < tokens.length() {
+    let token = tokens[index]
+    if token == "*" {
+      place = place.deref_place()
+      index = index + 1
+      continue
+    }
+    match parse_tuple_index_token(token) {
+      Some(tuple_index) => place = place.tuple_index(tuple_index)
+      None => place = place.field(token)
+    }
+    index = index + 1
+  }
+
+  Some(place)
+}
+
+///|
+fn invalid_target_operation_from_details(details : String) -> String? {
+  let marker = " target is not a valid place expression"
+  if !details.contains(marker) {
+    return None
+  }
+
+  let parts = details.split(marker).map(StringView::to_string).collect()
+  if parts.length() == 0 {
+    return None
+  }
+
+  let operation = parts[0]
+  if operation.is_empty() {
+    return None
+  }
+  Some(operation)
+}
+
+///|
 fn find_conflicting_loan(
   loans : Array[Loan],
   place : Place,
@@ -952,9 +1001,29 @@ fn lower_tuple_projection_tuple_literal_into_ir(
 }
 
 ///|
+fn alias_passthrough_value_rebinds(value : Term, binder_name : String) -> Bool {
+  match value {
+    Var(source_name) => source_name == binder_name
+    Lam(param_name, _, body_term) =>
+      match body_term {
+        App(Var(source_name), Var(forwarded_name)) =>
+          source_name == binder_name && forwarded_name == param_name
+        _ => false
+      }
+    _ => false
+  }
+}
+
+///|
 fn let_body_alias_call_argument(body : Term, binder_name : String) -> Term? {
   match body {
     App(Var(call_name), arg) if call_name == binder_name => Some(arg)
+    Let(next_alias_name, alias_value, next_body) =>
+      if alias_passthrough_value_rebinds(alias_value, binder_name) {
+        let_body_alias_call_argument(next_body, next_alias_name)
+      } else {
+        None
+      }
     _ => None
   }
 }
@@ -1588,6 +1657,138 @@ pub fn Place::deref_place(self : Place) -> Place {
   Place::{
     root: self.root,
     projections: append_projection(self.projections, Deref),
+  }
+}
+
+///|
+/// Description: Converts borrow/lifetime typing errors into structured actionable payloads.
+/// Example: `let _ = UseAfterMove("x").borrow_payload()`
+pub fn TypingError::borrow_payload(self : TypingError) -> BorrowErrorPayload? {
+  match self {
+    UseAfterMove(path) =>
+      Some(BorrowErrorPayload::{
+        error_kind: "UseAfterMove",
+        operation: Some("use"),
+        place: place_from_key_path(path),
+        place_path: Some(path),
+        active_loan_place_path: None,
+        requested_place_path: None,
+        conflict: None,
+        region_constraint: None,
+        details: None,
+      })
+    MovedValueBorrow(path) =>
+      Some(BorrowErrorPayload::{
+        error_kind: "MovedValueBorrow",
+        operation: Some("borrow"),
+        place: place_from_key_path(path),
+        place_path: Some(path),
+        active_loan_place_path: None,
+        requested_place_path: None,
+        conflict: None,
+        region_constraint: None,
+        details: None,
+      })
+    BorrowConflict(active_loan_place, requested_place) => {
+      let active_loan_place_path = place_key(active_loan_place)
+      let requested_place_path = place_key(requested_place)
+      Some(BorrowErrorPayload::{
+        error_kind: "BorrowConflict",
+        operation: Some("borrow"),
+        place: Some(requested_place),
+        place_path: Some(requested_place_path),
+        active_loan_place_path: Some(active_loan_place_path),
+        requested_place_path: Some(requested_place_path),
+        conflict: Some(BorrowConflictPayload::{
+          active_loan_place,
+          active_loan_place_path,
+          requested_place,
+          requested_place_path,
+        }),
+        region_constraint: None,
+        details: None,
+      })
+    }
+    MutateWhileBorrowed(place) => {
+      let path = place_key(place)
+      Some(BorrowErrorPayload::{
+        error_kind: "MutateWhileBorrowed",
+        operation: Some("assign_mutable"),
+        place: Some(place),
+        place_path: Some(path),
+        active_loan_place_path: None,
+        requested_place_path: None,
+        conflict: None,
+        region_constraint: None,
+        details: None,
+      })
+    }
+    AssignToImmutable(place) => {
+      let path = place_key(place)
+      Some(BorrowErrorPayload::{
+        error_kind: "AssignToImmutable",
+        operation: Some("assign_immutable"),
+        place: Some(place),
+        place_path: Some(path),
+        active_loan_place_path: None,
+        requested_place_path: None,
+        conflict: None,
+        region_constraint: None,
+        details: None,
+      })
+    }
+    BorrowOutlivesOwner(path) =>
+      Some(BorrowErrorPayload::{
+        error_kind: "BorrowOutlivesOwner",
+        operation: Some("borrow_outlives_owner"),
+        place: place_from_key_path(path),
+        place_path: Some(path),
+        active_loan_place_path: None,
+        requested_place_path: None,
+        conflict: None,
+        region_constraint: None,
+        details: None,
+      })
+    DanglingReferenceEscape(path) =>
+      Some(BorrowErrorPayload::{
+        error_kind: "DanglingReferenceEscape",
+        operation: Some("dangling_reference_escape"),
+        place: place_from_key_path(path),
+        place_path: Some(path),
+        active_loan_place_path: None,
+        requested_place_path: None,
+        conflict: None,
+        region_constraint: None,
+        details: None,
+      })
+    InvalidBorrowTarget(details) =>
+      Some(BorrowErrorPayload::{
+        error_kind: "InvalidBorrowTarget",
+        operation: match invalid_target_operation_from_details(details) {
+          Some(operation) => Some(operation)
+          None => Some("invalid_target")
+        },
+        place: None,
+        place_path: None,
+        active_loan_place_path: None,
+        requested_place_path: None,
+        conflict: None,
+        region_constraint: None,
+        details: Some(details),
+      })
+    RegionConstraintUnsatisfied(constraint) =>
+      Some(BorrowErrorPayload::{
+        error_kind: "RegionConstraintUnsatisfied",
+        operation: Some("region_constraint"),
+        place: None,
+        place_path: None,
+        active_loan_place_path: None,
+        requested_place_path: None,
+        conflict: None,
+        region_constraint: Some(constraint),
+        details: None,
+      })
+    _ => None
   }
 }
 

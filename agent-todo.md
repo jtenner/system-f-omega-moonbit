@@ -1,7 +1,7 @@
 # Agent TODO: Remaining Backlog
 
 ## Verified State (2026-02-23)
-- Library tests are green: `/home/jtenner/.moon/bin/moon test --package jtenner/sfo` -> `Total tests: 757, passed: 757, failed: 0`.
+- Library tests are green: `/home/jtenner/.moon/bin/moon test --package jtenner/sfo` -> `Total tests: 766, passed: 766, failed: 0`.
 - Completed items were removed during cleanup. This file tracks only unfinished work.
 
 ## Priority P0: README Beginner Guide and Full-Library Examples
@@ -35,6 +35,7 @@
 - [x] Require `/home/jtenner/.moon/bin/moon test --package jtenner/sfo` after README edits and record the result in backlog updates.
 
 ## Priority P1: Borrow Soundness and Policy Consolidation
+- P1 status: completed on 2026-02-23; active engineering priority now moves to P3 diagnostics/rendering hardening.
 - [x] Split `check_type` into explicit core/policy layers so fallback infer paths can reuse native-policy analysis state instead of re-scanning terms in mixed infer/check flows.
 - [x] Extend region constraint generation for trait dictionary flow and polymorphic boundaries.
 - [x] Add explicit tests for region safety across trait abstraction and polymorphic generalization boundaries.
@@ -51,8 +52,8 @@
 - [x] Add record-projection passthrough lowering for non-literal record sources and IR-level selected-vs-non-selected field depth assertions.
 - [x] Extend projection passthrough to additional call shapes beyond direct lambda applications (e.g. let-bound function aliases) while keeping conservative fallback for unknown callees.
 - [x] Add nested-producer regression coverage (`let -> match -> projection`, `let -> app -> projection`) to lock scope-depth and branch-boundary invariants across composed lowering paths.
-- [ ] Add explicit conservative-fallback IR-depth regression tests for unknown alias callees (`let f = unknown in f(arg)`) to lock non-passthrough behavior.
-- [ ] Extend alias-call passthrough beyond single-hop `let` bindings (e.g. alias chains and simple eta wrappers) while preserving current conservative fallback policy.
+- [x] Add explicit conservative-fallback IR-depth regression tests for unknown alias callees (`let f = unknown in f(arg)`) to lock non-passthrough behavior.
+- [x] Extend alias-call passthrough beyond single-hop `let` bindings (e.g. alias chains and simple eta wrappers) while preserving current conservative fallback policy.
 
 ## Priority P2: Probe Removal and Test Migration
 - P2 status: completed on 2026-02-23 via semantic borrow-program migration in negative/spec/edge-case suites.
@@ -60,15 +61,17 @@
 - [x] Retire probe-only scaffolding (`borrow_probe_term`, `__err_*`-driven scenarios) after equivalent native/semantic coverage is confirmed.
 
 ## Priority P3: Diagnostics and Developer UX
-- [ ] Finalize actionable payload formats for all borrow/lifetime errors in `types.mbt` (especially `BorrowConflict`).
-- [ ] Add payload assertions in tests for all borrow/lifetime errors (operation, place path, active/conflicting loan context, region constraint).
+- [x] Finalize actionable payload formats for all borrow/lifetime errors in `types.mbt` (especially `BorrowConflict`).
+- [x] Add payload assertions in tests for all borrow/lifetime errors (operation, place path, active/conflicting loan context, region constraint).
 - [ ] Implement robust `Show`/pretty rendering for borrow structures and borrow/lifetime errors in `show.mbt`.
+- [ ] Add focused payload regression tests for direct native typing paths (`infer_type`/`check_type` borrow errors) to ensure payload extraction remains aligned outside `analyze_borrows`.
 
 ## Priority P4: Code Organization and Maintenance
 - [ ] Split `borrow_scaffold.mbt` into focused modules (`borrow_ir.mbt`, `region_solver.mbt`, `borrow_checker.mbt`) with no behavior regression.
 - [ ] Regenerate and review `pkg.generated.mbti` after each API-affecting change.
 - [ ] Keep `/home/jtenner/.moon/bin/moon fmt` and `/home/jtenner/.moon/bin/moon test --package jtenner/sfo` green after each vertical slice.
 - [ ] Remove or consume currently unused borrow test-support helpers (`typing_error_kind_from_ir_result`, `typing_error_kind_from_constraints_result`, `typing_error_kind_from_facts_result`) to keep test runs warning-clean.
+- [ ] Consolidate duplicate place-path formatting/parsing helpers (`place_key` in `borrow_scaffold.mbt` vs `native_place_key_for_typing` in `typechecker.mbt`) to reduce drift risk.
 
 ## Validation Commands
 - `/home/jtenner/.moon/bin/moon test --package jtenner/sfo`

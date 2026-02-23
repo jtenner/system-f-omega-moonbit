@@ -438,6 +438,31 @@ pub enum BorrowTerm {
 }
 
 ///|
+/// Description: Structured context for a borrow conflict between an active loan and a new requested borrow.
+/// Example: `let c = BorrowConflictPayload::{ active_loan_place: Place::root("x"), active_loan_place_path: "x", requested_place: Place::root("x").field("field"), requested_place_path: "x.field" }`
+pub struct BorrowConflictPayload {
+  active_loan_place : Place
+  active_loan_place_path : String
+  requested_place : Place
+  requested_place_path : String
+}
+
+///|
+/// Description: Actionable borrow/lifetime diagnostic payload derived from `TypingError`.
+/// Example: `let p = BorrowErrorPayload::{ error_kind: "UseAfterMove", operation: Some("use"), place: Some(Place::root("x")), place_path: Some("x"), active_loan_place_path: None, requested_place_path: None, conflict: None, region_constraint: None, details: None }`
+pub struct BorrowErrorPayload {
+  error_kind : String
+  operation : String?
+  place : Place?
+  place_path : String?
+  active_loan_place_path : String?
+  requested_place_path : String?
+  conflict : BorrowConflictPayload?
+  region_constraint : RegionConstraint?
+  details : String?
+}
+
+///|
 /// Description: Error variants produced by kinding, typing, unification, and imports.
 /// Example: `let e : TypingError = Unbound("x")`
 pub suberror TypingError {

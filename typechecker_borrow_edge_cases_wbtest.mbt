@@ -234,6 +234,132 @@ fn let_bound_function_alias_record_source_term() -> Term {
 }
 
 ///|
+fn unknown_alias_callee_tuple_source_term() -> Term {
+  Term::let_term(
+    "f",
+    Term::var_term("unknown"),
+    Term::app(
+      Term::var_term("f"),
+      Term::tuple([
+        Term::borrow_shared(Term::var_term("x")),
+        Term::borrow_shared(Term::var_term("y")),
+      ]),
+    ),
+  )
+}
+
+///|
+fn unknown_alias_callee_record_source_term() -> Term {
+  Term::let_term(
+    "f",
+    Term::var_term("unknown"),
+    Term::app(
+      Term::var_term("f"),
+      Term::record([
+        ("left", Term::borrow_shared(Term::var_term("x"))),
+        ("right", Term::borrow_shared(Term::var_term("y"))),
+      ]),
+    ),
+  )
+}
+
+///|
+fn alias_chain_tuple_source_term() -> Term {
+  Term::let_term(
+    "mk_tuple",
+    Term::lam(
+      "_",
+      Type::unit(),
+      Term::tuple([
+        Term::borrow_shared(Term::var_term("x")),
+        Term::borrow_shared(Term::var_term("y")),
+      ]),
+    ),
+    Term::let_term(
+      "tuple_alias_1",
+      Term::var_term("mk_tuple"),
+      Term::let_term(
+        "tuple_alias_2",
+        Term::var_term("tuple_alias_1"),
+        Term::app(Term::var_term("tuple_alias_2"), Term::unit()),
+      ),
+    ),
+  )
+}
+
+///|
+fn alias_chain_record_source_term() -> Term {
+  Term::let_term(
+    "mk_record",
+    Term::lam(
+      "_",
+      Type::unit(),
+      Term::record([
+        ("left", Term::borrow_shared(Term::var_term("x"))),
+        ("right", Term::borrow_shared(Term::var_term("y"))),
+      ]),
+    ),
+    Term::let_term(
+      "record_alias_1",
+      Term::var_term("mk_record"),
+      Term::let_term(
+        "record_alias_2",
+        Term::var_term("record_alias_1"),
+        Term::app(Term::var_term("record_alias_2"), Term::unit()),
+      ),
+    ),
+  )
+}
+
+///|
+fn eta_wrapper_tuple_source_term() -> Term {
+  Term::let_term(
+    "mk_tuple",
+    Term::lam(
+      "_",
+      Type::unit(),
+      Term::tuple([
+        Term::borrow_shared(Term::var_term("x")),
+        Term::borrow_shared(Term::var_term("y")),
+      ]),
+    ),
+    Term::let_term(
+      "mk_tuple_eta",
+      Term::lam(
+        "arg",
+        Type::unit(),
+        Term::app(Term::var_term("mk_tuple"), Term::var_term("arg")),
+      ),
+      Term::app(Term::var_term("mk_tuple_eta"), Term::unit()),
+    ),
+  )
+}
+
+///|
+fn eta_wrapper_record_source_term() -> Term {
+  Term::let_term(
+    "mk_record",
+    Term::lam(
+      "_",
+      Type::unit(),
+      Term::record([
+        ("left", Term::borrow_shared(Term::var_term("x"))),
+        ("right", Term::borrow_shared(Term::var_term("y"))),
+      ]),
+    ),
+    Term::let_term(
+      "mk_record_eta",
+      Term::lam(
+        "arg",
+        Type::unit(),
+        Term::app(Term::var_term("mk_record"), Term::var_term("arg")),
+      ),
+      Term::app(Term::var_term("mk_record_eta"), Term::unit()),
+    ),
+  )
+}
+
+///|
 fn let_wrapped_match_tuple_source_term() -> Term {
   Term::let_term("tmp", branch_join_tuple_source_term(), Term::var_term("tmp"))
 }
@@ -883,6 +1009,126 @@ test "RED: record-projection lowering keeps selected let-bound function-alias ap
     let_bound_function_alias_record_source_term(),
     "right",
   )
+  let lowered = lower_to_borrow_ir(term)
+  assert_true(lowered is Ok(_))
+  match lowered {
+    Ok(ir) =>
+      match
+        (
+          first_borrow_shared_scope_depth_for_var(ir, "x"),
+          first_borrow_shared_scope_depth_for_var(ir, "y"),
+        ) {
+        (Some(non_selected_depth), Some(selected_depth)) =>
+          assert_true(selected_depth < non_selected_depth)
+        _ => panic()
+      }
+    _ => panic()
+  }
+}
+
+///|
+test "RED: tuple-projection lowering keeps unknown alias-callee apps conservative (no passthrough depth skew)" {
+  let term = Term::tuple_project(unknown_alias_callee_tuple_source_term(), 1)
+  let lowered = lower_to_borrow_ir(term)
+  assert_true(lowered is Ok(_))
+  match lowered {
+    Ok(ir) =>
+      match
+        (
+          first_borrow_shared_scope_depth_for_var(ir, "x"),
+          first_borrow_shared_scope_depth_for_var(ir, "y"),
+        ) {
+        (Some(non_selected_depth), Some(selected_depth)) =>
+          assert_true(selected_depth == non_selected_depth)
+        _ => panic()
+      }
+    _ => panic()
+  }
+}
+
+///|
+test "RED: record-projection lowering keeps unknown alias-callee apps conservative (no passthrough depth skew)" {
+  let term = Term::project(unknown_alias_callee_record_source_term(), "right")
+  let lowered = lower_to_borrow_ir(term)
+  assert_true(lowered is Ok(_))
+  match lowered {
+    Ok(ir) =>
+      match
+        (
+          first_borrow_shared_scope_depth_for_var(ir, "x"),
+          first_borrow_shared_scope_depth_for_var(ir, "y"),
+        ) {
+        (Some(non_selected_depth), Some(selected_depth)) =>
+          assert_true(selected_depth == non_selected_depth)
+        _ => panic()
+      }
+    _ => panic()
+  }
+}
+
+///|
+test "RED: tuple-projection lowering passthrough supports multi-hop let alias chains" {
+  let term = Term::tuple_project(alias_chain_tuple_source_term(), 1)
+  let lowered = lower_to_borrow_ir(term)
+  assert_true(lowered is Ok(_))
+  match lowered {
+    Ok(ir) =>
+      match
+        (
+          first_borrow_shared_scope_depth_for_var(ir, "x"),
+          first_borrow_shared_scope_depth_for_var(ir, "y"),
+        ) {
+        (Some(non_selected_depth), Some(selected_depth)) =>
+          assert_true(selected_depth < non_selected_depth)
+        _ => panic()
+      }
+    _ => panic()
+  }
+}
+
+///|
+test "RED: record-projection lowering passthrough supports multi-hop let alias chains" {
+  let term = Term::project(alias_chain_record_source_term(), "right")
+  let lowered = lower_to_borrow_ir(term)
+  assert_true(lowered is Ok(_))
+  match lowered {
+    Ok(ir) =>
+      match
+        (
+          first_borrow_shared_scope_depth_for_var(ir, "x"),
+          first_borrow_shared_scope_depth_for_var(ir, "y"),
+        ) {
+        (Some(non_selected_depth), Some(selected_depth)) =>
+          assert_true(selected_depth < non_selected_depth)
+        _ => panic()
+      }
+    _ => panic()
+  }
+}
+
+///|
+test "RED: tuple-projection lowering passthrough supports simple eta-wrapped aliases" {
+  let term = Term::tuple_project(eta_wrapper_tuple_source_term(), 1)
+  let lowered = lower_to_borrow_ir(term)
+  assert_true(lowered is Ok(_))
+  match lowered {
+    Ok(ir) =>
+      match
+        (
+          first_borrow_shared_scope_depth_for_var(ir, "x"),
+          first_borrow_shared_scope_depth_for_var(ir, "y"),
+        ) {
+        (Some(non_selected_depth), Some(selected_depth)) =>
+          assert_true(selected_depth < non_selected_depth)
+        _ => panic()
+      }
+    _ => panic()
+  }
+}
+
+///|
+test "RED: record-projection lowering passthrough supports simple eta-wrapped aliases" {
+  let term = Term::project(eta_wrapper_record_source_term(), "right")
   let lowered = lower_to_borrow_ir(term)
   assert_true(lowered is Ok(_))
   match lowered {

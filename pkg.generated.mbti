@@ -65,6 +65,7 @@ pub suberror TypingError {
   CircularImport(String, Array[String])
   Message(String)
 }
+pub fn TypingError::borrow_payload(Self) -> BorrowErrorPayload?
 
 // Types and methods
 pub struct AutoInstantiated {
@@ -102,6 +103,25 @@ pub struct BorrowCheckerOptions {
 }
 pub fn BorrowCheckerOptions::default() -> Self
 pub fn BorrowCheckerOptions::disabled() -> Self
+
+pub struct BorrowConflictPayload {
+  active_loan_place : Place
+  active_loan_place_path : String
+  requested_place : Place
+  requested_place_path : String
+}
+
+pub struct BorrowErrorPayload {
+  error_kind : String
+  operation : String?
+  place : Place?
+  place_path : String?
+  active_loan_place_path : String?
+  requested_place_path : String?
+  conflict : BorrowConflictPayload?
+  region_constraint : RegionConstraint?
+  details : String?
+}
 
 pub struct BorrowFacts {
   loans : Array[Loan]
